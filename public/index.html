@@ -376,7 +376,7 @@
       <a href="#pricing">Pricing</a>
       <a href="/v1/info" class="mono">API</a>
     </div>
-    <a href="#demo" class="nav-cta">Try free demo →</a>
+    <a href="#demo" class="nav-cta">Try free →</a>
   </div>
 </nav>
 
@@ -392,7 +392,7 @@
           report covering the team, every wallet, and the on-chain history that actually matters.
         </p>
         <div class="hero-actions">
-          <a href="#demo" class="btn btn-primary">Run a free audit →</a>
+          <a href="#demo" class="btn btn-primary">Audit any project →</a>
           <a href="#how" class="btn btn-ghost">How it works</a>
         </div>
         <div class="meta">
@@ -405,14 +405,15 @@
       <!-- Live demo card -->
       <div class="demo-card" id="demo">
         <div class="demo-tabs">
-          <div class="demo-tab active" data-target="uniswap">Uniswap (legit)</div>
-          <div class="demo-tab" data-target="hyperliquid">Hyperliquid (mid)</div>
-          <div class="demo-tab" data-target="safereum">SafeMoon (low)</div>
+          <div class="demo-tab active" data-target="uniswap">Uniswap</div>
+          <div class="demo-tab" data-target="hyperliquid">Hyperliquid</div>
+          <div class="demo-tab" data-target="safereum">SafeMoon</div>
+          <div class="demo-tab" data-target="__custom">Any project →</div>
         </div>
         <div class="demo-body">
-          <div class="demo-hint">Free demo · runs a real audit, returns a real PDF</div>
+          <div class="demo-hint" id="demo-hint">Free live audit · runs a real LLM-powered audit on any project</div>
           <div class="demo-input-row">
-            <input type="text" id="demo-input" class="demo-input" value="https://uniswap.org" />
+            <input type="text" id="demo-input" class="demo-input" value="https://uniswap.org" placeholder="Project name, @handle, contract, or URL" />
             <button class="demo-run" id="demo-run">Audit</button>
           </div>
           <div class="demo-progress" id="demo-progress">
@@ -570,6 +571,7 @@
   const PROGRESS = document.getElementById('demo-progress');
   const PROGRESS_FILL = document.getElementById('progress-fill');
   const OUTPUT = document.getElementById('demo-output');
+  const HINT = document.getElementById('demo-hint');
   const STEPS = ['step-1','step-2','step-3','step-4','step-5','step-6'];
 
   const TARGETS = {
@@ -582,7 +584,16 @@
     tab.addEventListener('click', () => {
       TABS.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      INPUT.value = TARGETS[tab.dataset.target];
+      if (tab.dataset.target === '__custom') {
+        INPUT.value = '';
+        INPUT.placeholder = 'Type any project name, @handle, contract, or URL';
+        INPUT.focus();
+        HINT.textContent = 'Audit any project — free demo · runs in ~5s';
+      } else {
+        INPUT.value = TARGETS[tab.dataset.target];
+        INPUT.placeholder = 'Project name, @handle, contract, or URL';
+        HINT.textContent = 'Free live audit · runs a real LLM-powered audit on any project';
+      }
     });
   });
 
@@ -597,7 +608,14 @@
   }
 
   RUN.addEventListener('click', async () => {
-    const target = document.querySelector('.demo-tab.active').dataset.target;
+    const activeTab = document.querySelector('.demo-tab.active');
+    const isCustom = activeTab.dataset.target === '__custom';
+    const target = activeTab.dataset.target;
+    const customQuery = isCustom ? INPUT.value.trim() : '';
+    if (isCustom && !customQuery) {
+      INPUT.focus();
+      return;
+    }
     RUN.disabled = true;
     RUN.textContent = 'Auditing...';
     PROGRESS.classList.add('show');
@@ -612,10 +630,11 @@
     }, 700);
 
     try {
+      const payload = isCustom ? { query: customQuery } : { target };
       const res = await fetch('/v1/demo', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target }),
+        body: JSON.stringify(payload),
       });
       clearInterval(tick);
       if (!res.ok) {
@@ -710,8 +729,8 @@
           <a href="/v1/info" class="download-btn">Call via API</a>
         </div>
         <div class="demo-helper">
-          Demo runs are free. For any other project, call <code>POST /v1/audit</code> with x402 payment
-          (1.5 USDT0) to get a fresh report.
+          Free demo · 1 audit per 30s. Same agent powers the <code>POST /v1/audit</code> x402 paywalled endpoint
+          (1.5 USDT0 per audit) for programmatic access.
         </div>
       </div>
     `;

@@ -53,17 +53,34 @@ async function main() {
     reply.code(402).send(challenge);
   });
 
-  // Free demo endpoint — runs an audit on 3 preset projects (no x402)
-  // Used by the landing page "Try a demo" buttons
+  // Free demo endpoint — runs an audit on any project (no x402, no payment)
+  // Rate-limited per IP to prevent abuse (1 call per 30 seconds)
+  const demoLastCall = new Map<string, number>();
   app.post("/v1/demo", async (req, reply) => {
-    const body = (req.body ?? {}) as { target?: string };
-    const target = body.target ?? "uniswap";
-    const demoTargets: Record<string, string> = {
-      uniswap: "https://uniswap.org",
-      hyperliquid: "Hyperliquid",
-      safereum: "SafeMoon",  // a known-bad example to show the AVOID verdict
-    };
-    const query = demoTargets[target] ?? "Uniswap";
+    const body = (req.body ?? {}) as { target?: string; query?: string };
+    let query: string;
+    if (body.query) {
+      // Custom input from the "Any project" tab
+      query = body.query;
+    } else {
+      // Preset targets
+      const demoTargets: Record<string, string> = {
+        uniswap: "https://uniswap.org",
+        hyperliquid: "Hyperliquid",
+        safereum: "SafeMoon",
+        __custom: "Uniswap",
+      };
+      query = demoTargets[body.target ?? "uniswap"] ?? "Uniswap";
+    }
+    // Rate limit: 1 call per 30s per IP
+    const ip = req.ip;
+    const last = demoLastCall.get(ip) ?? 0;
+    if (Date.now() - last < 30_000) {
+      const wait = Math.ceil((30_000 - (Date.now() - last)) / 1000);
+      reply.code(429).send({ error: `Rate limited. Try again in ${wait}s.` });
+      return;
+    }
+    demoLastCall.set(ip, Date.now());
     try {
       const { report, durationMs } = await runAudit({ query });
       const pdf = await renderReportPdf(report);
