@@ -229,6 +229,7 @@ export function buildReport(
   dataConfidence: number,
   dossier?: OnchainDossier | null,
 ): AuditReport {
+  console.log(`[buildReport] project=${identity.canonicalName}, hasDossier=${!!dossier}, hasHolders=${!!dossier?.holders}, hasDeployer=${!!dossier?.deployerReputation}, otherTokensLen=${dossier?.deployerReputation?.otherTokens?.length}, smartMoneyLen=${dossier?.smartMoney?.length}, recentNewsLen=${dossier?.recentNews?.length}`);
   return {
     id: `TL-${startedAt.getUTCFullYear()}-${String(startedAt.getUTCMonth() + 1).padStart(2, "0")}-${String(startedAt.getUTCDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
     identity,
@@ -272,7 +273,7 @@ export function buildReport(
           deployerReputation: dossier.deployerReputation
             ? {
                 deployerAddress: dossier.deployerReputation.deployerAddress,
-                otherTokens: dossier.deployerReputation.otherTokens.map((t) => ({
+                otherTokens: (dossier.deployerReputation.otherTokens ?? []).map((t) => ({
                   symbol: t.symbol,
                   name: t.name,
                   chain: String(t.chain),
