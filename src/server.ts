@@ -61,7 +61,12 @@ async function main() {
       `${config.publicBaseUrl}/v1/audit`,
       "VEY1 forensic project audit — returns a 12-18 page PDF",
     );
-    reply.code(402).send(challenge);
+    const encoded = Buffer.from(JSON.stringify(challenge), "utf8").toString("base64");
+    reply
+      .code(402)
+      .header("PAYMENT-REQUIRED", encoded)
+      .header("X-PAYMENT-REQUIRED", encoded)
+      .send(challenge);
   });
 
   // Free demo endpoint — runs an audit on any project (no x402, no payment)
@@ -135,11 +140,19 @@ async function main() {
     const paymentHeader = req.headers["x-payment"];
     const paymentHeaderStr = Array.isArray(paymentHeader) ? paymentHeader[0] : paymentHeader;
     if (!isPaymentHeaderValid(paymentHeaderStr)) {
+      // OKX validator requirement: 402 with `PAYMENT-REQUIRED` response header
+      // containing the base64-encoded challenge. This is the canonical x402
+      // v2 signal. See: https://x402.org/spec
       const challenge = buildPaymentChallenge(
         `${config.publicBaseUrl}/v1/audit`,
         "VEY1 forensic project audit — returns a 12-18 page PDF",
       );
-      reply.code(402).send(challenge);
+      const encoded = Buffer.from(JSON.stringify(challenge), "utf8").toString("base64");
+      reply
+        .code(402)
+        .header("PAYMENT-REQUIRED", encoded)
+        .header("X-PAYMENT-REQUIRED", encoded)
+        .send(challenge);
       return;
     }
 

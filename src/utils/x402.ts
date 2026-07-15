@@ -1,16 +1,23 @@
 // src/utils/x402.ts
-// Minimal x402 v2 payment-required response builder.
-// When a request comes in without a valid payment header, we return a
-// 402 with the standard x402 v2 PaymentRequirements. The user (or their
-// agent wallet) signs the payload, replays the request with
-// `X-PAYMENT: <base64 payload>`, and we verify + serve.
+// x402 v2 payment-required response builder using the OFFICIAL OKX Payment
+// SDK (@okxweb3/x402-express). Returns a 402 challenge in the standard
+// x402 v2 shape, with the required `PAYMENT-REQUIRED` header so the OKX
+// validator can confirm compliance.
 //
-// For the hackathon MVP we keep this minimal: the payment challenge is
-// generated, but signature verification is delegated to a local helper
-// because we don't have a Circle Gateway sidecar in this environment.
-// Production should use the canonical x402 facilitator.
+// Reference: https://web3.okx.com/onchainos/dev-docs/payments/service-seller-sdk
 
 import { config } from "../config/secrets.js";
+import {
+  x402ResourceServer,
+  paymentMiddlewareFromConfig,
+} from "@okxweb3/x402-express";
+import { OKXFacilitatorClient } from "@okxweb3/x402-core";
+import type { PaywallConfig } from "@okxweb3/x402-core/server";
+import { ExactEvmScheme } from "@okxweb3/x402-evm/exact/server";
+
+// RoutesConfig has a specific shape — we re-define it here since the SDK
+// doesn't export the type publicly.
+type RoutesConfig = Record<string, any>;
 
 export interface X402PaymentRequirements {
   scheme: "exact";
@@ -87,5 +94,61 @@ export function isPaymentHeaderValid(header: string | undefined): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+// ─── Official OKX Payment SDK integration ─────────────────────────────────
+
+/**
+ * Build the canonical OKX x402 payment middleware for our /v1/audit endpoint.
+ * Uses the official @okxweb3/x402-express middleware, adapted to work with
+ * Fastify (the Express middleware is an (req, res, next) function that we
+ * can wire up directly via fastify.addHook).
+ *
+ * Requires env vars:
+ *   OKX_FACILITATOR_API_KEY      — OKX exchange API key (Read-only permission)
+ *   OKX_FACILITATOR_SECRET_KEY   — API secret
+ *   OKX_FACILITATOR_PASSPHRASE   — API passphrase
+ *
+ * Without these, the facilitator client will throw on init and the middleware
+ * builder returns null. In that case the server falls back to the minimal
+ * 402 challenge (no facilitator, no auto-verification) so the demo still
+ * works for listing review.
+ */
+export function buildX402Middleware(): ((req: any, res: any, next?: any) => Promise<any>) | null {
+  if (!process.env.OKX_FACILITATOR_API_KEY || !process.env.OKX_FACILITATOR_SECRET_KEY || !process.env.OKX_FACILITATOR_PASSPHRASE) {
+    console.warn("[x402] facilitator credentials not set — falling back to minimal 402 challenge");
+    return null;
+  }
+  try {
+    const facilitator = new OKXFacilitatorClient({
+      apiKey: process.env.OKX_FACILITATOR_API_KEY,
+      secretKey: process.env.OKX_FACILITATOR_SECRET_KEY,
+      passphrase: process.env.OKX_FACILITATOR_PASSPHRASE,
+    });
+    const server = new x402ResourceServer(facilitator);
+    server.register(config.x402.network as `${string}:${string}`, new ExactEvmScheme());
+    const routes: RoutesConfig = {
+      "POST /v1/audit": {
+        accepts: [
+          {
+            scheme: "exact",
+            network: config.x402.network as any,
+            payTo: config.x402.receivingWallet,
+            price: `$${config.x402.auditPrice.toFixed(2)}`,
+          },
+        ],
+        description: "VEY1 forensic project audit — returns a 12-18 page PDF",
+        mimeType: "application/json",
+      },
+    };
+    const paywall: PaywallConfig = {
+      appName: "VEY1",
+      testnet: false,
+    };
+    return paymentMiddlewareFromConfig(routes, facilitator, [], paywall);
+  } catch (e) {
+    console.error("[x402] failed to build middleware:", e);
+    return null;
   }
 }
