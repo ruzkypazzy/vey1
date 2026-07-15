@@ -175,11 +175,42 @@ async function paidCall<T>(
 
 export async function searchToken(query: string, chain?: Chain): Promise<TokenInfo[]> {
   console.log(`[onchainos:search] query="${query}" chain=${chain ?? "(none)"}`);
-  return paidCall<TokenInfo[]>(
+  const result = await paidCall<unknown>(
     ["token", "search", "--query", query, ...(chain ? ["--chain", chain] : [])],
     [],
     "search",
   );
+  // The CLI returns { ok: true, data: [{...}, ...] } — unwrap and normalize
+  let rawList: any[] = [];
+  if (result && typeof result === "object" && "data" in (result as any)) {
+    rawList = ((result as any).data as any[]) ?? [];
+  } else if (Array.isArray(result)) {
+    rawList = result;
+  }
+  // Map to our TokenInfo shape
+  return rawList.slice(0, 5).map((t): TokenInfo => ({
+    symbol: t.symbol ?? t.tokenSymbol ?? "UNKNOWN",
+    name: t.name ?? t.tokenName ?? "Unknown",
+    address: t.address ?? t.tokenContractAddress ?? "",
+    chain: chainIndexToChain(t.chainIndex ?? t.chain) ?? (chain ?? "ethereum"),
+    decimals: parseInt(t.decimal ?? t.decimals ?? "18", 10),
+    deployerAddress: t.deployerAddress ?? t.creator ?? undefined,
+    source: "okx-dex-token",
+  }));
+}
+
+/** Map OKX chainIndex (string number) or chain name to our Chain type */
+function chainIndexToChain(idx: string | number | undefined): Chain | null {
+  if (idx == null) return null;
+  const s = String(idx).toLowerCase();
+  if (s === "1" || s === "ethereum" || s === "eth") return "ethereum";
+  if (s === "56" || s === "bsc" || s === "bnb") return "bsc";
+  if (s === "8453" || s === "base") return "base";
+  if (s === "42161" || s === "arbitrum" || s === "arb_eth") return "arbitrum";
+  if (s === "137" || s === "polygon" || s === "matic") return "polygon";
+  if (s === "196" || s === "okb" || s === "xlayer" || s === "x-layer") return "xlayer";
+  if (s === "501" || s === "solana" || s === "sol") return "solana";
+  return null;
 }
 
 export async function getTokenInfo(address: string, chain: Chain): Promise<TokenInfo> {
