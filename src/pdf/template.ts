@@ -57,7 +57,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
       <tr><th>Ownership renounced</th><td>${sec.hasRenounced ? "Yes" : "No"}</td></tr>
       <tr><th>Mint function</th><td>${sec.hasMintFunction ? "<strong style=\"color:#d97706\">Present (can inflate supply)</strong>" : "Disabled"}</td></tr>
       ${sec.holderConcentration != null ? `<tr><th>Top-10 concentration</th><td>${pct(sec.holderConcentration)}</td></tr>` : ""}
-      ${sec.suspiciousFlags.length > 0 ? `<tr><th>Suspicious flags</th><td>${sec.suspiciousFlags.map((f) => `<span class="mini-flag" style="background:#dc2626">!</span> ${escapeHtml(f)}`).join("; ")}</td></tr>` : ""}
+      ${(sec.suspiciousFlags?.length ?? 0) > 0 ? `<tr><th>Suspicious flags</th><td>${sec.suspiciousFlags.map((f) => `<span class="mini-flag" style="background:#dc2626">!</span> ${escapeHtml(f)}`).join("; ")}</td></tr>` : ""}
     </table>` : `<h3>Security scan <span class="muted small">(okx-security)</span></h3><p class="muted">Security scan unavailable (x402 call failed — see evidence log).</p>`;
 
   // Holders panel

@@ -259,7 +259,7 @@ export function buildReport(
                 hasRenounced: dossier.security.hasRenounced,
                 hasMintFunction: dossier.security.hasMintFunction,
                 holderConcentration: dossier.security.holderConcentration,
-                suspiciousFlags: dossier.security.suspiciousFlags,
+                suspiciousFlags: dossier.security.suspiciousFlags ?? [],
               }
             : undefined,
           holders: dossier.holders
