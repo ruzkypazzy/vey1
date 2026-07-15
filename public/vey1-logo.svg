@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <!-- VEY1 logo: stylized "V" with audit crosshair / magnifying glass
+       Design rationale: 1:1, no text, flat vector, hard 90deg edges,
+       abstract geometric, represents due-diligence examination.
+       Palette: deep navy (trust) + amber (warning) + white -->
+
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a0e1a"/>
+      <stop offset="100%" stop-color="#1a1f2e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background: deep navy (trust, blockchain, security) -->
+  <rect width="1080" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- Concentric square frames (1:1, hard 90deg edges) -->
+  <rect x="120" y="120" width="840" height="840" fill="none" stroke="#fbbf24" stroke-width="8" opacity="0.5"/>
+  <rect x="200" y="200" width="680" height="680" fill="none" stroke="#fbbf24" stroke-width="4" opacity="0.3"/>
+
+  <!-- Main "V" mark — flat, geometric, no chrome/render -->
+  <!-- The V is constructed from 4 straight lines (90deg, hard edges) -->
+  <g fill="#fbbf24">
+    <!-- Left stroke of V (parallelogram) -->
+    <polygon points="280,300 420,300 600,780 540,780"/>
+    <!-- Right stroke of V (parallelogram, mirrored) -->
+    <polygon points="660,300 800,300 540,780 480,780"/>
+  </g>
+
+  <!-- Central crosshair (audit/examine theme) -->
+  <!-- Vertical line -->
+  <rect x="530" y="450" width="20" height="180" fill="#ffffff"/>
+  <!-- Horizontal line -->
+  <rect x="450" y="530" width="180" height="20" fill="#ffffff"/>
+  <!-- Center dot -->
+  <circle cx="540" cy="540" r="35" fill="#dc2626"/>
+  <circle cx="540" cy="540" r="20" fill="#ffffff"/>
+
+  <!-- Corner crosshair marks (forensic examination) -->
+  <g fill="#fbbf24">
+    <!-- Top-left -->
+    <rect x="280" y="280" width="40" height="8"/>
+    <rect x="280" y="280" width="8" height="40"/>
+    <!-- Top-right -->
+    <rect x="760" y="280" width="40" height="8"/>
+    <rect x="792" y="280" width="8" height="40"/>
+    <!-- Bottom-left -->
+    <rect x="280" y="792" width="40" height="8"/>
+    <rect x="280" y="760" width="8" height="40"/>
+    <!-- Bottom-right -->
+    <rect x="760" y="792" width="40" height="8"/>
+    <rect x="792" y="760" width="8" height="40"/>
+  </g>
+
+  <!-- Bottom row of 3 small marks (representing RED/YELLOW/GREEN flags) -->
+  <g>
+    <rect x="450" y="900" width="40" height="40" fill="#dc2626"/>
+    <rect x="520" y="900" width="40" height="40" fill="#fbbf24"/>
+    <rect x="590" y="900" width="40" height="40" fill="#10b981"/>
+  </g>
+</svg>
