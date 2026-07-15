@@ -58,7 +58,13 @@ recommendation: "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID"
 - CAUTION: 40 <= riskScore < 60
 - AVOID: riskScore < 40
 
-reasoning: 3-6 sentences. Cite dossier sources explicitly. Distinguish on-chain facts from inferences.`;
+reasoning: 6-10 sentences. Cite dossier sources explicitly. Distinguish on-chain facts from inferences. Each sentence should ideally reference a specific piece of evidence. NEVER produce generic boilerplate — every claim must be project-specific and grounded in either the dossier or your cited knowledge of crypto history.
+
+topRisks: 5-8 specific, project-tailored risks. Examples of GOOD risks: "Deployer's only other token (CRV) rugged within 90 days of launch", "Top-10 holders own 87% of supply — one wallet sells could crash the price", "No audit report found; contract not verified on Etherscan", "Founder's previous project (SafeMoon) was charged with fraud by SEC in 2023". Examples of BAD risks: "Market volatility", "General crypto risks", "Regulatory uncertainty" (too generic).
+
+flags: 4-8 material flags. Each must be project-specific and tied to a specific piece of evidence (cite the source). Avoid vague flags like "operational risk".
+
+comparableProjects: 3-5 SPECIFIC similar projects with year, status (ACTIVE/RUGGED/ABANDONED/ACQUIRED), and outcome. For example, a Curve Finance audit should compare to Uniswap, Balancer, Bancor, etc. — NOT to "various DeFi protocols". For a meme coin, compare to other meme coins of similar size. Use your knowledge of crypto history.
 
 interface LlmResponseShape {
   riskScore: number;

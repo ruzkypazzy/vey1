@@ -8,7 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { config } from "./config/secrets.js";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readFile, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentChallenge, isPaymentHeaderValid } from "./utils/x402.js";
@@ -39,6 +39,12 @@ async function main() {
   // Health
   app.get("/ready", async () => ({ ok: true, ts: Date.now() }));
   app.get("/health", async () => ({ ok: true, ts: Date.now() }));
+
+  // API docs (proper HTML page, not raw JSON)
+  app.get("/api-docs", async (_req, reply) => {
+    const path = resolve(publicDir, "api-docs.html");
+    reply.type("text/html; charset=utf-8").send(await readFile(path, "utf8"));
+  });
 
   // Discovery: what VEY1 is, what it costs, how to call it
   app.get("/v1/info", async () => ({

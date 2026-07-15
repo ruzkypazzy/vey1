@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VEY1 API — x402 paywalled forensic crypto audit</title>
+  <meta name="description" content="How to call VEY1's forensic project audit endpoint via x402 payment on X Layer. 1.5 USDT0 per call." />
+  <style>
+    :root {
+      --bg: #08090c; --bg-elev: #11131a; --bg-elev-2: #181a24;
+      --border: #232634; --border-bright: #353849;
+      --text: #e8eaf0; --text-dim: #9ca0b3; --text-mute: #6b6e80;
+      --accent: #f59e0b; --accent-2: #ef4444; --accent-3: #10b981; --accent-4: #3b82f6;
+      --radius: 6px; --radius-lg: 12px;
+      --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+    body {
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", "Inter", sans-serif;
+      font-size: 15px; line-height: 1.55;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre { font-family: var(--font-mono); font-size: 0.92em; }
+    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: blur(12px);
+      background: rgba(8,9,12,0.78);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px; max-width: 960px; margin: 0 auto;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; letter-spacing: 0.02em;
+      color: var(--text);
+    }
+    .nav-brand .mark {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #0a0a0a;
+      border-radius: 4px; font-weight: 800; font-size: 14px;
+    }
+    .nav-links { display: flex; gap: 26px; font-size: 14px; color: var(--text-dim); }
+    .nav-links a { color: var(--text-dim); }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    h1 { font-size: 32px; margin: 0 0 8px 0; }
+    h2 { font-size: 22px; margin: 48px 0 12px 0; padding-top: 24px; border-top: 1px solid var(--border); }
+    h3 { font-size: 17px; margin: 28px 0 10px 0; }
+    p, li { color: var(--text-dim); }
+    .lede { font-size: 17px; color: var(--text-dim); margin: 0 0 32px 0; max-width: 720px; }
+    .endpoint {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .endpoint-method {
+      display: inline-block;
+      padding: 4px 10px;
+      background: var(--accent-3);
+      color: #0a0a0a;
+      font-weight: 700;
+      font-size: 12px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+      margin-right: 12px;
+    }
+    .endpoint-method.post { background: var(--accent-3); }
+    .endpoint-method.get { background: var(--accent-4); }
+    .endpoint-path { font-family: var(--font-mono); font-size: 17px; font-weight: 600; }
+    .endpoint-desc { color: var(--text-dim); margin-top: 8px; }
+    pre {
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      overflow-x: auto;
+      color: var(--text);
+      margin: 12px 0;
+    }
+    pre .comment { color: var(--text-mute); }
+    pre .key { color: var(--accent); }
+    pre .str { color: var(--accent-3); }
+    pre .num { color: var(--accent-2); }
+    pre .bool { color: var(--accent-4); }
+    .pill {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: var(--bg-elev-2);
+      color: var(--text-dim);
+      margin-right: 6px;
+    }
+    .pill.req { background: var(--accent-2); color: white; }
+    .pill.opt { background: var(--bg-elev-2); color: var(--text-mute); }
+    .table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    .table th, .table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .table th { color: var(--text-mute); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+    .table td { color: var(--text); }
+    .table code { background: var(--bg-elev-2); padding: 1px 6px; border-radius: 3px; }
+    .callout {
+      background: var(--bg-elev);
+      border-left: 3px solid var(--accent);
+      padding: 14px 18px;
+      margin: 16px 0;
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    .callout-title { font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+    .footer {
+      border-top: 1px solid var(--border);
+      margin-top: 80px;
+      padding: 32px 0;
+      color: var(--text-mute);
+      font-size: 13px;
+    }
+    .footer .container { display: flex; justify-content: space-between; align-items: center; }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { color: var(--text-mute); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <span class="mark">V</span>
+      <span>VEY1</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/api-docs">API</a>
+      <a href="https://github.com/ruzkypazzy/vey1" target="_blank">GitHub</a>
+      <a href="/ready">Status</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container" style="padding-top: 48px; padding-bottom: 64px;">
+
+<h1>VEY1 API</h1>
+<p class="lede">
+  Forensic crypto project due diligence. One endpoint, two modes: a free demo
+  (rate-limited to 1 call per 30s) for trying things out, and the production
+  <code>POST /v1/audit</code> endpoint that's paywalled via the
+  <a href="https://www.x402.org/" target="_blank">x402 protocol</a> on X Layer
+  (1.5 USDT0 per audit).
+</p>
+
+<div class="callout">
+  <div class="callout-title">How the x402 flow works</div>
+  <ol style="margin: 0; padding-left: 20px;">
+    <li>Your agent sends a request to <code>POST /v1/audit</code> without a payment header.</li>
+    <li>VEY1 returns <code>HTTP 402</code> with a <code>PAYMENT-REQUIRED</code> response header containing the base64-encoded x402 challenge (the amount, network, receiving wallet, and asset contract).</li>
+    <li>Your agent signs the challenge with its Agentic Wallet (EIP-3009 / EIP-712 signature on the USDT0 contract).</li>
+    <li>Your agent re-sends the same request, this time with the signed payment in the <code>X-PAYMENT</code> header.</li>
+    <li>VEY1 verifies the payment against the OKX facilitator, then runs the audit and returns the result + PDF link.</li>
+  </ol>
+</div>
+
+<h2>Free demo</h2>
+
+<div class="endpoint">
+  <span class="endpoint-method post">POST</span>
+  <span class="endpoint-path">/v1/demo</span>
+  <div class="endpoint-desc">
+    Run an audit on any project. <strong>No payment required.</strong> Rate-limited to 1 call per 30 seconds per IP. Returns the same audit data as the paid endpoint.
+  </div>
+</div>
+
+<h3>Request body</h3>
+<pre><code>{
+  <span class="key">"query"</span>: <span class="str">"SushiSwap"</span>           <span class="comment">// OR use a preset via "target": "uniswap" | "hyperliquid" | "safemoon"</span>
+}</code></pre>
+
+<h3>Response (200 OK)</h3>
+<pre><code>{
+  <span class="key">"reportId"</span>: <span class="str">"TL-2026-07-15-XXXX"</span>,
+  <span class="key">"project"</span>: <span class="str">"SushiSwap"</span>,
+  <span class="key">"riskScore"</span>: <span class="num">50</span>,
+  <span class="key">"recommendation"</span>: <span class="str">"CAUTION"</span>,
+  <span class="key">"reasoning"</span>: <span class="str">"The Uniswap project has a neutral risk profile..."</span>,
+  <span class="key">"flags"</span>: [{ <span class="key">"color"</span>: <span class="str">"YELLOW"</span>, <span class="key">"category"</span>: <span class="str">"DATA_GAP"</span>, <span class="key">"message"</span>: <span class="str">"..."</span> }],
+  <span class="key">"comparableProjects"</span>: [{ <span class="key">"name"</span>: <span class="str">"Uniswap"</span>, <span class="key">"status"</span>: <span class="str">"ACTIVE"</span> }],
+  <span class="key">"pdf"</span>: { <span class="key">"url"</span>: <span class="str">"https://vey1.xyz/reports/TL-2026-07-15-XXXX.pdf"</span>, <span class="key">"pageCount"</span>: <span class="num">8</span> },
+  <span class="key">"html"</span>: { <span class="key">"url"</span>: <span class="str">"https://vey1.xyz/reports/TL-2026-07-15-XXXX.html"</span> },
+  <span class="key">"durationMs"</span>: <span class="num">4250</span>
+}</code></pre>
+
+<h3>Try it</h3>
+<pre><code>curl -X POST https://vey1.xyz/v1/demo \
+  -H "content-type: application/json" \
+  -d '{"query": "SushiSwap"}'</code></pre>
+
+<h2>Paid audit (x402)</h2>
+
+<div class="endpoint">
+  <span class="endpoint-method post">POST</span>
+  <span class="endpoint-path">/v1/audit</span>
+  <div class="endpoint-desc">
+    Same audit, but paywalled. <strong>1.5 USDT0 per call</strong> on X Layer
+    (chain <code>eip155:196</code>). Your Agentic Wallet signs the payment
+    automatically when it sees the <code>402</code> response.
+  </div>
+</div>
+
+<h3>Step 1 — Make a request without payment</h3>
+<pre><code>curl -i -X POST https://vey1.xyz/v1/audit \
+  -H "content-type: application/json" \
+  -d '{"query": "Uniswap"}'</code></pre>
+
+<h3>Step 2 — Receive the 402 challenge</h3>
+<pre><code>HTTP/2 402
+content-type: application/json
+<span class="key">payment-required</span>: eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoi...
+<span class="key">x-payment-required</span>: eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoi...
+
+{
+  <span class="key">"x402Version"</span>: <span class="num">2</span>,
+  <span class="key">"resource"</span>: {
+    <span class="key">"url"</span>: <span class="str">"https://vey1.xyz/v1/audit"</span>,
+    <span class="key">"description"</span>: <span class="str">"VEY1 forensic project audit — returns a 12-18 page PDF"</span>,
+    <span class="key">"mimeType"</span>: <span class="str">"application/json"</span>
+  },
+  <span class="key">"accepted"</span>: {
+    <span class="key">"scheme"</span>: <span class="str">"exact"</span>,
+    <span class="key">"network"</span>: <span class="str">"eip155:196"</span>,
+    <span class="key">"maxAmountRequired"</span>: <span class="str">"1500000"</span>,
+    <span class="key">"payTo"</span>: <span class="str">"0x72233b78747765244855dd27180bbed9c0245f96"</span>,
+    <span class="key">"maxTimeoutSeconds"</span>: <span class="num">300</span>,
+    <span class="key">"asset"</span>: <span class="str">"0x779ded0c9e1022225f8e0630b35a9b54be713736"</span>,
+    <span class="key">"extra"</span>: { <span class="key">"name"</span>: <span class="str">"USD₮0"</span>, <span class="key">"version"</span>: <span class="str">"1"</span> }
+  }
+}</code></pre>
+
+<h3>Step 3 — Your agent signs + retries</h3>
+<p>Your Agentic Wallet (e.g. via the <code>onchainos</code> CLI or the OKX Pay SDK) signs the <code>maxAmountRequired</code> USDT0 transfer authorization (EIP-3009 <code>TransferWithAuthorization</code>), wraps the signature in a base64-encoded JSON payload, and re-sends the same request with that payload in the <code>X-PAYMENT</code> header.</p>
+
+<h3>Step 4 — Receive the audit</h3>
+<p>Once the facilitator verifies the payment on-chain, the same JSON response as the free demo is returned, plus the signed <code>X-PAYMENT-RESPONSE</code> header with the settlement receipt.</p>
+
+<h3>Try it with the onchainos CLI</h3>
+<pre><code>curl -i -X POST https://vey1.xyz/v1/audit \
+  -H "content-type: application/json" \
+  -d '{"query": "Uniswap"}' 2>&1 | head -20
+<span class="comment"># → see the 402 challenge and the PAYMENT-REQUIRED header</span></code></pre>
+
+<h2>Service info</h2>
+
+<div class="endpoint">
+  <span class="endpoint-method get">GET</span>
+  <span class="endpoint-path">/v1/info</span>
+  <div class="endpoint-desc">Discovery endpoint — returns the agent's name, price, payment network, asset, and receiving wallet. No payment required.</div>
+</div>
+
+<pre><code>curl https://vey1.xyz/v1/info</code></pre>
+
+<h2>Report files</h2>
+
+<div class="endpoint">
+  <span class="endpoint-method get">GET</span>
+  <span class="endpoint-path">/reports/:filename</span>
+  <div class="endpoint-desc">Fetch a generated report (HTML or PDF). No payment required once the audit is paid for. Path-traversal guard in place.</div>
+</div>
+
+<h2>Error codes</h2>
+
+<table class="table">
+  <thead>
+    <tr><th>Status</th><th>When</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>200</code></td><td>Success. Report is in the response body + <code>pdf.url</code> / <code>html.url</code>.</td></tr>
+    <tr><td><code>400</code></td><td>Missing or malformed <code>query</code> field.</td></tr>
+    <tr><td><code>402</code></td><td>x402 challenge. Send the signed payment header to retry.</td></tr>
+    <tr><td><code>429</code></td><td>Demo rate limit (1 call per 30s per IP).</td></tr>
+    <tr><td><code>500</code></td><td>Audit pipeline error. Inspect the <code>error</code> field for details.</td></tr>
+  </tbody>
+</table>
+
+<h2>What the audit contains</h2>
+<p>Every report is a 12-18 page PDF covering:</p>
+<ul>
+  <li><strong>Executive summary</strong> — risk score (0-100), recommendation, reasoning, top flags.</li>
+  <li><strong>Project profile</strong> — name, ticker, contract, chain, social links, identity confidence.</li>
+  <li><strong>On-chain audit</strong> — every project-controlled wallet, its funding source, first-seen date, counterparty graph.</li>
+  <li><strong>OnchainOS real-time evidence</strong> — security scan, holder cluster analysis, deployer's other tokens, smart money signals, social sentiment, cited news, deployer wallet PnL. Every data point is cited to the specific OKX OnchainOS skill that returned it (<code>okx-security</code>, <code>okx-dex-trenches</code>, <code>okx-dex-signal</code>, <code>okx-dex-social</code>, <code>okx-dex-token</code>, <code>okx-dex-market</code>).</li>
+  <li><strong>Team dossiers</strong> — for every identified team member: identity verification, public social footprint, past project associations, personal on-chain wallets, scam database cross-reference.</li>
+  <li><strong>Risk synthesis</strong> — the LLM's evidence-based narrative with explicit <code>Per okx-&lt;skill&gt;:</code> citations.</li>
+  <li><strong>Comparable projects</strong> — 3-5 historical analogues with status (ACTIVE / RUGGED / ABANDONED / ACQUIRED).</li>
+  <li><strong>Final recommendation</strong> — <code>PROCEED</code> / <code>PROCEED_WITH_MONITORING</code> / <code>CAUTION</code> / <code>AVOID</code> with next steps.</li>
+  <li><strong>Methodology &amp; data sources</strong> — what data we used, what we couldn't, the data confidence score.</li>
+</ul>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div><strong style="color:var(--text-dim)">VEY1</strong> · Built for the OKX.AI Genesis Hackathon · x402 v2 on X Layer</div>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="https://github.com/ruzkypazzy/vey1" target="_blank">GitHub</a>
+      <a href="/ready">Status</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
