@@ -68,7 +68,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
       <tr><th>New wallet %</th><td>${pct(h.newWalletPercent)}</td></tr>
       <tr><th>Rug pull probability</th><td><strong style="color:${h.rugPullPercent > 30 ? "#dc2626" : h.rugPullPercent > 10 ? "#d97706" : "#059669"}">${pct(h.rugPullPercent)}</strong></td></tr>
     </table>
-    ${h.topHolders.length > 0 ? `
+    ${(h.topHolders?.length ?? 0) > 0 ? `
       <h4>Top holders</h4>
       <table class="table compact">
         <thead><tr><th>Address</th><th>% held</th><th>Tag</th></tr></thead>
@@ -86,7 +86,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
       <tr><th>Of which rugged</th><td><strong style="color:${dev.ruggedCount >= 2 ? "#dc2626" : dev.ruggedCount === 1 ? "#d97706" : "#059669"}">${dev.ruggedCount}</strong></td></tr>
       ${dev.avgTokenLifetimeDays != null ? `<tr><th>Avg token lifetime</th><td>${dev.avgTokenLifetimeDays.toFixed(0)} days</td></tr>` : ""}
     </table>
-    ${dev.otherTokens.length > 0 ? `
+    ${(dev.otherTokens?.length ?? 0) > 0 ? `
       <h4>Deployer's other tokens</h4>
       <table class="table compact">
         <thead><tr><th>Symbol</th><th>Name</th><th>Chain</th></tr></thead>
@@ -116,7 +116,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
     </table>` : "";
 
   // News panel
-  const newsPanel = news.length > 0 ? `
+  const newsPanel = (news?.length ?? 0) > 0 ? `
     <h3>Recent news <span class="muted small">(okx-dex-social, cited)</span></h3>
     <ol class="news-list">
       ${news.slice(0, 8).map((n) => `<li><strong>${escapeHtml(n.title)}</strong> — <a href="${escapeHtml(n.url)}">${escapeHtml(n.source)}</a> <span class="muted">${n.publishedAt ? new Date(n.publishedAt).toISOString().slice(0, 10) : ""}</span></li>`).join("")}
