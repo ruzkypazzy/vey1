@@ -59,12 +59,15 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 COPY public ./public
+COPY scripts/restore-onchainos-session.sh /usr/local/bin/restore-onchainos-session.sh
 
 RUN mkdir -p /app/data/outputs /app/.onchainos
+RUN chmod +x /usr/local/bin/restore-onchainos-session.sh
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/ready || exit 1
 
-CMD ["node", "dist/server.js"]
+# Restore the Agentic Wallet session from $ONCHAINOS_SESSION_B64, then start the app
+CMD ["sh", "-c", "restore-onchainos-session.sh && node dist/server.js"]

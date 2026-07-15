@@ -10,3 +10,7 @@ output/
 reports/
 .idea/
 .vscode/
+
+# OnchainOS session (sensitive — restore from Railway env var instead)
+onchainos-session*.tar.gz
+.onchainos
