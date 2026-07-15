@@ -22,7 +22,8 @@
     "ethers": "^6.13.4",
     "fastify": "^4.28.1",
     "puppeteer": "^23.10.4",
-    "puppeteer-core": "^24.15.0"
+    "puppeteer-core": "^24.15.0",
+    "undici": "^6.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
