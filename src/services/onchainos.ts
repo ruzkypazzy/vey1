@@ -271,15 +271,18 @@ export async function getTokensByDeployer(deployerAddress: string, chain: Chain)
 
 export async function getSmartMoneySignals(tokenAddress: string, chain: Chain): Promise<SmartMoneySignal[]> {
   return paidCall<SmartMoneySignal[]>(
-    ["signal", "list", "--chain", chain],
+    ["signal", "list", "--chain", chain, "--token-address", tokenAddress, "--limit", "10"],
     [],
     "signal",
   );
 }
 
-export async function getTokenSentiment(symbol: string): Promise<SentimentSignal> {
+export async function getTokenSentiment(symbol: string, tokenAddress?: string, chain: Chain = "ethereum"): Promise<SentimentSignal> {
+  // vibe-timeline needs --token-address and --chain (not --symbol)
   return paidCall<SentimentSignal>(
-    ["social", "vibe-timeline", "--symbol", symbol],
+    tokenAddress
+      ? ["social", "vibe-timeline", "--chain", chain, "--token-address", tokenAddress]
+      : ["social", "sentiment-symbol", "--token-symbols", symbol, "--chain", chain],
     {
       symbol,
       sentimentScore: 50,
@@ -291,7 +294,7 @@ export async function getTokenSentiment(symbol: string): Promise<SentimentSignal
 
 export async function getTokenNews(symbol: string, limit = 10): Promise<SentimentSignal["topNews"]> {
   return paidCall<SentimentSignal["topNews"]>(
-    ["social", "news-by-symbol", "--symbol", symbol, "--limit", String(limit)],
+    ["social", "news-by-symbol", "--token-symbols", symbol, "--limit", String(limit)],
     [],
     "news",
   );
@@ -456,7 +459,7 @@ export async function buildDossier(query: string, chain?: Chain): Promise<Onchai
   tasks.push(
     (async () => {
       try {
-        sentiment = await getTokenSentiment(resolvedToken!.symbol);
+        sentiment = await getTokenSentiment(resolvedToken!.symbol, resolvedToken!.address, tokenChain);
         costUsdt0 += COST_PER_BASIC;
       } catch (e) {
         errors.push(`sentiment: ${e instanceof Error ? e.message : String(e)}`);
