@@ -12,7 +12,7 @@ import { scrapeProjectSite } from "../audit/scrape.js";
 import { auditWallet } from "../audit/onchain.js";
 import { buildTeam } from "../audit/team.js";
 import { synthesizeAudit, buildReport } from "./prompt.js";
-import { buildDossier, checkOnchainosAvailable, type OnchainDossier } from "../services/onchainos.js";
+import { buildDossier, checkOnchainosAvailable, canMakePaidCalls, type OnchainDossier } from "../services/onchainos.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -97,17 +97,33 @@ export async function runAudit(
   let dossier: OnchainDossier | null = null;
   const onchainosHealth = await checkOnchainosAvailable();
   if (onchainosHealth.ok && process.env.ONCHAINOS_DISABLED !== "1") {
-    try {
-      dossier = await buildDossier(input.query, identity.chain as any);
-      evidence.push({ type: "onchainos", ref: "dossier", note: `cost=${dossier.costUsdt0.toFixed(4)} USDT0` });
-    } catch (e) {
-      evidence.push({ type: "error", ref: "onchainos-dossier", note: String(e) });
+    // Pre-flight: try to bootstrap the session and check the balance.
+    // Skip the dossier entirely if we can't pay for it.
+    const preflight = await canMakePaidCalls();
+    if (preflight.ok) {
+      evidence.push({
+        type: "onchainos",
+        ref: "session",
+        note: `logged in, balance ${preflight.balance?.toFixed(4)} USDT0`,
+      });
+      try {
+        dossier = await buildDossier(input.query, identity.chain as any);
+        evidence.push({ type: "onchainos", ref: "dossier", note: `cost=${dossier.costUsdt0.toFixed(4)} USDT0` });
+      } catch (e) {
+        evidence.push({ type: "error", ref: "onchainos-dossier", note: String(e) });
+      }
+    } else {
+      evidence.push({
+        type: "info",
+        ref: "onchainos",
+        note: `preflight skipped: ${preflight.reason}`,
+      });
     }
   } else {
     evidence.push({
       type: "info",
       ref: "onchainos",
-      note: onchainosHealth.ok ? "disabled by env" : `unavailable: ${onchainosHealth.error}`,
+      note: onchainosHealth.ok ? "disabled by env" : `unavailable: ${onchainosHealth.error ?? "see logs"}`,
     });
   }
 

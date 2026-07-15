@@ -47,8 +47,12 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV DATA_DIR=./data
 ENV OUTPUT_DIR=./data/outputs
 
-# Onchainos config (Agentic Wallet login)
+# Onchainos config (API key auth + Agentic Wallet for x402 payments)
 ENV ONCHAINOS_HOME=/app/.onchainos
+# These should be set as Railway env vars (NOT baked into the image):
+#   OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE  → auth header
+#   AGENTIC_WALLET_EMAIL, AGENTIC_WALLET_ADDRESS  → x402 payment source
+#   AGENTIC_WALLET_BALANCE_USDT0                  → pre-flight check (avoid burning calls)
 
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules

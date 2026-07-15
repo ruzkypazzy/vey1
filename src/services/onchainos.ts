@@ -2,17 +2,36 @@
 // Wraps the onchainos CLI to make real x402-paywalled calls to OKX OnchainOS.
 // This is what makes VEY1's audit "real" — every data point comes from OKX's
 // own infrastructure, not LLM hallucination.
+//
+// Authentication: API Key via env vars (no OTP needed in headless containers).
+//   OKX_API_KEY
+//   OKX_SECRET_KEY
+//   OKX_PASSPHRASE
+// Set these in Railway env vars and the CLI auto-logs-in on first call.
+//
+// Payment: x402 calls draw from the Agentic Wallet (0x72233b...) — must have
+// USDT0 balance. We pre-flight check the balance before any paid call to
+// avoid wasting calls when the wallet is empty.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile, readFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const exec = promisify(execFile);
 
 const ONCHAINOS_BIN = process.env.ONCHAINOS_BIN || "onchainos";
 const ONCHAINOS_HOME = process.env.ONCHAINOS_HOME || "/app/.onchainos";
+const SESSION_FILE = resolve(ONCHAINOS_HOME, "session.json");
+
+// Minimum USDT0 balance to attempt any paid call. Below this, skip onchainos
+// entirely to avoid x402 payment failures that confuse the user.
+const MIN_BALANCE_USDT0 = 0.01;
+
+// Cache wallet balance to avoid hammering the API
+let cachedBalance: { balance: number; ts: number } | null = null;
+const BALANCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export type Chain = "ethereum" | "bsc" | "base" | "arbitrum" | "polygon" | "solana" | "xlayer";
 
@@ -461,11 +480,22 @@ export async function buildDossier(query: string, chain?: Chain): Promise<Onchai
 
 // ─── Health check ───────────────────────────────────────────────────────────
 
-export async function checkOnchainosAvailable(): Promise<{ ok: boolean; version?: string; error?: string }> {
+export async function checkOnchainosAvailable(): Promise<{ ok: boolean; version?: string; error?: string; loggedIn?: boolean; balance?: number }> {
   try {
     const { stdout } = await exec(ONCHAINOS_BIN, ["--version"], { timeout: 5_000 });
     const match = stdout.match(/onchainos\s+([\d.]+)/);
-    return { ok: true, version: match?.[1] };
+    const version = match?.[1];
+
+    // Check login state
+    const loggedIn = await isLoggedIn();
+
+    // Check balance (best effort)
+    let balance: number | undefined;
+    if (loggedIn) {
+      balance = await getAgenticWalletBalance();
+    }
+
+    return { ok: true, version, loggedIn, balance };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -483,4 +513,121 @@ export async function ensureSessionHome(): Promise<void> {
   if (!existsSync(ONCHAINOS_HOME)) {
     await mkdir(ONCHAINOS_HOME, { recursive: true });
   }
+}
+
+/**
+ * Check if the onchainos CLI is already logged in (session file or cached).
+ * Returns true if a prior login session exists.
+ */
+export async function isLoggedIn(): Promise<boolean> {
+  try {
+    const { stdout } = await exec(
+      ONCHAINOS_BIN,
+      ["wallet", "status"],
+      {
+        timeout: 10_000,
+        env: {
+          ...process.env,
+          ONCHAINOS_HOME,
+          PATH: `${process.env.PATH}:/root/.local/bin`,
+        },
+      },
+    );
+    const json = JSON.parse(stdout.trim());
+    return json?.data?.loggedIn === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bootstrap the session: if env has API key credentials and we're not
+ * already logged in, attempt a non-interactive login. Returns whether the
+ * session is ready for paid calls.
+ */
+export async function bootstrapSession(): Promise<{ ok: boolean; reason: string }> {
+  if (process.env.ONCHAINOS_DISABLED === "1") {
+    return { ok: false, reason: "disabled by env" };
+  }
+  if (!process.env.OKX_API_KEY || !process.env.OKX_SECRET_KEY || !process.env.OKX_PASSPHRASE) {
+    return { ok: false, reason: "missing OKX_API_KEY/SECRET/PASSPHRASE env vars" };
+  }
+  if (await isLoggedIn()) {
+    return { ok: true, reason: "already logged in" };
+  }
+  try {
+    await ensureSessionHome();
+    const { stdout, stderr } = await exec(
+      ONCHAINOS_BIN,
+      ["wallet", "login"],
+      {
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          ONCHAINOS_HOME,
+          PATH: `${process.env.PATH}:/root/.local/bin`,
+        },
+      },
+    );
+    if (stdout.includes("ok") || stdout.includes("success")) {
+      return { ok: true, reason: "API key login succeeded" };
+    }
+    return { ok: false, reason: `login response: ${stdout.slice(0, 200)} | ${stderr.slice(0, 200)}` };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Get the current Agentic Wallet balance in USDT0 (X Layer).
+ * Returns 0 if not logged in or balance unavailable.
+ * Cached for 5 minutes to avoid hammering the API.
+ */
+export async function getAgenticWalletBalance(): Promise<number> {
+  if (cachedBalance && Date.now() - cachedBalance.ts < BALANCE_TTL_MS) {
+    return cachedBalance.balance;
+  }
+  try {
+    const { stdout } = await exec(
+      ONCHAINOS_BIN,
+      ["wallet", "balance", "--chain", "xlayer"],
+      {
+        timeout: 10_000,
+        env: {
+          ...process.env,
+          ONCHAINOS_HOME,
+          PATH: `${process.env.PATH}:/root/.local/bin`,
+        },
+      },
+    );
+    const json = JSON.parse(stdout.trim());
+    const balance = parseFloat(json?.data?.totalAssets ?? json?.data?.balance ?? "0");
+    cachedBalance = { balance, ts: Date.now() };
+    return balance;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Pre-flight: is the session ready + does the wallet have enough balance?
+ * Returns true only if we should attempt paid calls.
+ */
+export async function canMakePaidCalls(): Promise<{ ok: boolean; reason: string; balance?: number }> {
+  const session = await bootstrapSession();
+  if (!session.ok) {
+    return { ok: false, reason: session.reason };
+  }
+  const balance = await getAgenticWalletBalance();
+  if (balance < MIN_BALANCE_USDT0) {
+    return { ok: false, reason: `balance too low: ${balance.toFixed(4)} USDT0 < ${MIN_BALANCE_USDT0}`, balance };
+  }
+  return { ok: true, reason: "ready", balance };
+}
+
+/**
+ * Reset the balance cache. Call this after a paid call to force a refresh.
+ */
+export function invalidateBalanceCache(): void {
+  cachedBalance = null;
 }

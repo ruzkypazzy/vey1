@@ -12,6 +12,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentChallenge, isPaymentHeaderValid } from "./utils/x402.js";
+import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(__dirname, "..", "public");
@@ -24,6 +25,16 @@ async function main() {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: true });
   await app.register(fastifyStatic, { root: publicDir, prefix: "/" });
+
+  // Startup: check onchainos availability + bootstrap session
+  const onchainosHealth = await checkOnchainosAvailable();
+  if (onchainosHealth.ok) {
+    app.log.info(`onchainos CLI v${onchainosHealth.version} available`);
+    const session = await bootstrapSession();
+    app.log.info(`onchainos session: ${session.ok ? "ready" : "skipped"} (${session.reason})`);
+  } else {
+    app.log.warn(`onchainos CLI unavailable: ${onchainosHealth.error ?? "see logs"}`);
+  }
 
   // Health
   app.get("/ready", async () => ({ ok: true, ts: Date.now() }));
