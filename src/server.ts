@@ -8,7 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { config } from "./config/secrets.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentChallenge, isPaymentHeaderValid } from "./utils/x402.js";
@@ -118,7 +118,7 @@ async function main() {
     }
   });
 
-  // Serve generated PDFs (signed URLs would replace this in production)
+  // Serve generated reports (PDFs and HTMLs)
   app.get("/reports/:filename", async (req, reply) => {
     const { filename } = req.params as { filename: string };
     // path-traversal guard
@@ -127,8 +127,20 @@ async function main() {
       return;
     }
     const fullPath = resolve(config.outputDir, filename);
-    app.log.info(`Serving report: ${fullPath} (exists=${existsSync(fullPath)})`);
-    reply.sendFile(fullPath);
+    if (!existsSync(fullPath)) {
+      reply.code(404).send({ error: "Not found" });
+      return;
+    }
+    const stat = statSync(fullPath);
+    if (!stat.isFile() || stat.size === 0) {
+      reply.code(404).send({ error: "File empty or invalid" });
+      return;
+    }
+    const buf = readFileSync(fullPath);
+    const contentType = filename.endsWith(".pdf")
+      ? "application/pdf"
+      : "text/html; charset=utf-8";
+    reply.header("content-type", contentType).header("content-length", String(buf.length)).send(buf);
   });
 
   await app.listen({ port: config.port, host: config.host });
