@@ -59,10 +59,12 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 COPY public ./public
-COPY scripts/restore-onchainos-session.sh /usr/local/bin/restore-onchainos-session.sh
+COPY scripts/ /usr/local/bin/scripts/
+RUN cp /usr/local/bin/scripts/restore-onchainos-session.sh /usr/local/bin/restore-onchainos-session.sh \
+  && chmod +x /usr/local/bin/restore-onchainos-session.sh \
+  && rm -rf /usr/local/bin/scripts
 
 RUN mkdir -p /app/data/outputs /app/.onchainos
-RUN chmod +x /usr/local/bin/restore-onchainos-session.sh
 
 EXPOSE 8080
 
@@ -70,4 +72,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/ready || exit 1
 
 # Restore the Agentic Wallet session from $ONCHAINOS_SESSION_B64, then start the app
-CMD ["sh", "-c", "restore-onchainos-session.sh && node dist/server.js"]
+# Add a touch to force fresh build cache
+ARG BUILD_TIMESTAMP=unknown
+RUN echo "build_ts=$BUILD_TIMESTAMP" > /etc/vey1-build-info
+ENV VEY1_BUILD_TS=$BUILD_TIMESTAMP
+CMD ["sh", "-c", "echo \"[vey1] build_ts=$VEY1_BUILD_TS\"; restore-onchainos-session.sh; echo '[vey1] restore done, starting app'; exec node dist/server.js"]

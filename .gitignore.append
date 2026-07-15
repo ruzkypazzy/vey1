@@ -1,0 +1,4 @@
+
+# OnchainOS session archive (sensitive, should never be in git)
+onchainos-session*.tar.gz
+*.onchainos

@@ -158,12 +158,12 @@ async function paidCall<T>(
     return mockValue;
   }
   try {
-    return await runCli<T>(args, { timeoutMs: 60_000 });
+    const result = await runCli<T>(args, { timeoutMs: 60_000 });
+    console.log(`[onchainos:${label}] result preview: ${JSON.stringify(result).slice(0, 300)}`);
+    return result;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    // If payment not confirmed (user error, not enough USDT0, etc.), return mock
-    // but log clearly so we can see what happened.
-    console.warn(`[onchainos:${label}] paid call failed: ${msg.slice(0, 200)}`);
+    console.warn(`[onchainos:${label}] paid call failed: ${msg.slice(0, 500)}`);
     if (process.env.ONCHAINOS_FAIL_OPEN === "1") {
       return mockValue;
     }
@@ -174,6 +174,7 @@ async function paidCall<T>(
 // ─── 1. Token search & info ─────────────────────────────────────────────────
 
 export async function searchToken(query: string, chain?: Chain): Promise<TokenInfo[]> {
+  console.log(`[onchainos:search] query="${query}" chain=${chain ?? "(none)"}`);
   return paidCall<TokenInfo[]>(
     ["token", "search", "--query", query, ...(chain ? ["--chain", chain] : [])],
     [],
