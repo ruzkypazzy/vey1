@@ -490,6 +490,14 @@ export async function checkOnchainosAvailable(): Promise<{ ok: boolean; version?
     // Check login state
     const loggedIn = await isLoggedIn();
 
+    // Log wallet status for debugging
+    try {
+      const { stdout: statusOut } = await exec(ONCHAINOS_BIN, ["wallet", "status"], { timeout: 5_000, env: { ...process.env, ONCHAINOS_HOME, PATH: `${process.env.PATH}:/root/.local/bin` } });
+      console.log(`[onchainos:status] ${statusOut.slice(0, 500)}`);
+    } catch (e) {
+      console.warn(`[onchainos:status] failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     // Check balance (best effort)
     let balance: number | undefined;
     if (loggedIn) {
