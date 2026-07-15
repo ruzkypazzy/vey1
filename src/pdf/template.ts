@@ -51,7 +51,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
   const secPanel = sec ? `
     <h3>Security scan <span class="muted small">(okx-security)</span></h3>
     <table class="table compact">
-      <tr><th>Risk level</th><td><strong style="color:${sec.riskLevel === "safe" || sec.riskLevel === "low" ? "#059669" : sec.riskLevel === "medium" ? "#d97706" : "#dc2626"}">${sec.riskLevel.toUpperCase()}</strong> (score ${sec.riskScore}/100)</td></tr>
+      <tr><th>Risk level</th><td><strong style="color:${sec.riskLevel === "safe" || sec.riskLevel === "low" ? "#059669" : sec.riskLevel === "medium" ? "#d97706" : "#dc2626"}">${(sec.riskLevel || "unknown").toUpperCase()}</strong> (score ${sec.riskScore ?? 0}/100)</td></tr>
       <tr><th>Honeypot?</th><td>${sec.isHoneypot ? "<strong style=\"color:#dc2626\">YES</strong>" : "No"}</td></tr>
       <tr><th>Can sell?</th><td>${sec.canSell ? "Yes" : "<strong style=\"color:#dc2626\">NO</strong>"}</td></tr>
       <tr><th>Ownership renounced</th><td>${sec.hasRenounced ? "Yes" : "No"}</td></tr>
