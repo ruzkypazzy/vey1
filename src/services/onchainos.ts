@@ -27,7 +27,8 @@ const SESSION_FILE = resolve(ONCHAINOS_HOME, "session.json");
 
 // Minimum USDT0 balance to attempt any paid call. Below this, skip onchainos
 // entirely to avoid x402 payment failures that confuse the user.
-const MIN_BALANCE_USDT0 = 0.01;
+// 0.005 USDT0 ≈ 2-3 audits. Set low so the demo can run on small balances.
+const MIN_BALANCE_USDT0 = 0.005;
 
 // Cache wallet balance to avoid hammering the API
 let cachedBalance: { balance: number; ts: number } | null = null;
@@ -588,7 +589,7 @@ export async function getAgenticWalletBalance(): Promise<number> {
     return cachedBalance.balance;
   }
   try {
-    const { stdout } = await exec(
+    const { stdout, stderr } = await exec(
       ONCHAINOS_BIN,
       ["wallet", "balance", "--chain", "xlayer"],
       {
@@ -600,11 +601,34 @@ export async function getAgenticWalletBalance(): Promise<number> {
         },
       },
     );
+    console.log(`[onchainos:balance] stdout=${stdout.slice(0, 500)} stderr=${stderr.slice(0, 200)}`);
     const json = JSON.parse(stdout.trim());
-    const balance = parseFloat(json?.data?.totalAssets ?? json?.data?.balance ?? "0");
+    // Try multiple response shapes — the CLI's response format has changed
+    // between versions. Most common: { data: { totalAssets: "1.5" } } or
+    // { data: { balance: "1.5" } } or { data: [{ symbol: "USDT0", balance: "1.5" }] }
+    let balance = 0;
+    const data = json?.data;
+    if (typeof data === "number" || typeof data === "string") {
+      balance = parseFloat(String(data));
+    } else if (data?.totalAssets) {
+      balance = parseFloat(data.totalAssets);
+    } else if (data?.balance) {
+      balance = parseFloat(data.balance);
+    } else if (Array.isArray(data)) {
+      const usdt0 = data.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
+    } else if (data?.tokens && Array.isArray(data.tokens)) {
+      const usdt0 = data.tokens.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
+    } else if (data?.assets && Array.isArray(data.assets)) {
+      const usdt0 = data.assets.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
+    }
+    console.log(`[onchainos:balance] parsed=${balance} from ${JSON.stringify(data).slice(0, 300)}`);
     cachedBalance = { balance, ts: Date.now() };
     return balance;
-  } catch {
+  } catch (e) {
+    console.warn(`[onchainos:balance] failed: ${e instanceof Error ? e.message : String(e)}`);
     return 0;
   }
 }
