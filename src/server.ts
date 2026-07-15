@@ -43,7 +43,8 @@ async function main() {
   // API docs (proper HTML page, not raw JSON)
   app.get("/api-docs", async (_req, reply) => {
     const path = resolve(publicDir, "api-docs.html");
-    reply.type("text/html; charset=utf-8").send(await readFile(path, "utf8"));
+    const content = readFileSync(path, "utf8");
+    reply.type("text/html; charset=utf-8").send(content);
   });
 
   // Discovery: what VEY1 is, what it costs, how to call it

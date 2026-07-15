@@ -1,8 +1,8 @@
 // src/synthesis/prompt.ts
-// LLM synthesis — the secret sauce. Given a ProjectAudit + real on-chain
+// LLM synthesis - the secret sauce. Given a ProjectAudit + real on-chain
 // dossier from OKX OnchainOS, ask the LLM to produce: a 0-100 risk score,
 // red/yellow/green flags, comparable projects, and a 1-paragraph
-// recommendation. The dossier is EVIDENCE — every claim in the final
+// recommendation. The dossier is EVIDENCE - every claim in the final
 // report should cite it.
 //
 // We use gpt-4o-mini via the OpenAI-compatible API (FreeModel.dev by
@@ -33,9 +33,9 @@ You receive a structured JSON payload that includes a "dossier" of REAL ON-CHAIN
 - recentNews: cited news articles with URLs
 - walletPnl: deployer wallet's win rate, realized PnL, total trades
 
-CITATION RULES — CRITICAL:
+CITATION RULES - CRITICAL:
 - Every material claim in the report must reference the source: "Per okx-dex-trenches: deployer has launched 3 prior tokens, 2 of which rugged", "Per okx-security: honeypot risk = low, mint function = disabled", "Per okx-dex-signal: 12 smart money wallets added this position in the last 7 days", "Per okx-dex-social: sentiment score = 72/100 (greedy), top KOLs: @alice, @bob".
-- If the dossier is null or empty, treat that as a data gap and say "OnchainOS data unavailable — relying on LLM knowledge + scraper". Downgrade the riskScore by 10 points for missing dossier.
+- If the dossier is null or empty, treat that as a data gap and say "OnchainOS data unavailable - relying on LLM knowledge + scraper". Downgrade the riskScore by 10 points for missing dossier.
 - Do NOT fabricate token addresses, deployer addresses, wallet PnL, or holder counts. Only use what's in the dossier.
 - For "comparableProjects" and historical context (e.g. "this is similar to BitConnect"), you may use your knowledge of crypto history, but distinguish clearly: "Historical context (LLM knowledge, not in dossier):" prefix.
 
@@ -58,13 +58,13 @@ recommendation: "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID"
 - CAUTION: 40 <= riskScore < 60
 - AVOID: riskScore < 40
 
-reasoning: 6-10 sentences. Cite dossier sources explicitly. Distinguish on-chain facts from inferences. Each sentence should ideally reference a specific piece of evidence. NEVER produce generic boilerplate — every claim must be project-specific and grounded in either the dossier or your cited knowledge of crypto history.
+reasoning: 6-10 sentences. Cite dossier sources explicitly. Distinguish on-chain facts from inferences. Each sentence should ideally reference a specific piece of evidence. NEVER produce generic boilerplate - every claim must be project-specific and grounded in either the dossier or your cited knowledge of crypto history.
 
-topRisks: 5-8 specific, project-tailored risks. Examples of GOOD risks: "Deployer's only other token (CRV) rugged within 90 days of launch", "Top-10 holders own 87% of supply — one wallet sells could crash the price", "No audit report found; contract not verified on Etherscan", "Founder's previous project (SafeMoon) was charged with fraud by SEC in 2023". Examples of BAD risks: "Market volatility", "General crypto risks", "Regulatory uncertainty" (too generic).
+topRisks: 5-8 specific, project-tailored risks. Examples of GOOD risks: Deployer's only other token rugged within 90 days of launch, Top-10 holders own 87% of supply, No audit report found and contract not verified, Founder's previous project charged with fraud. Examples of BAD risks: Market volatility, General crypto risks, Regulatory uncertainty (too generic).
 
 flags: 4-8 material flags. Each must be project-specific and tied to a specific piece of evidence (cite the source). Avoid vague flags like "operational risk".
 
-comparableProjects: 3-5 SPECIFIC similar projects with year, status (ACTIVE/RUGGED/ABANDONED/ACQUIRED), and outcome. For example, a Curve Finance audit should compare to Uniswap, Balancer, Bancor, etc. — NOT to "various DeFi protocols". For a meme coin, compare to other meme coins of similar size. Use your knowledge of crypto history.
+comparableProjects: 3-5 SPECIFIC similar projects with year, status (ACTIVE/RUGGED/ABANDONED/ACQUIRED), and outcome. For example, a Curve Finance audit should compare to Uniswap, Balancer, Bancor, etc. - NOT to "various DeFi protocols". For a meme coin, compare to other meme coins of similar size. Use your knowledge of crypto history.`;
 
 interface LlmResponseShape {
   riskScore: number;
@@ -125,7 +125,7 @@ export async function synthesizeAudit(
 
   const dossierNote = dossier
     ? `Real OnchainOS dossier attached (cost: ${dossier.costUsdt0.toFixed(4)} USDT0 from Agentic Wallet). CITE IT in your reasoning with explicit "Per okx-<skill>:" prefixes.`
-    : `⚠️ OnchainOS dossier is NULL or empty. Treat this as a DATA GAP — every claim is LLM-knowledge only, not real on-chain data. Downgrade riskScore by 10 points and note "OnchainOS data unavailable" in reasoning.`;
+    : `⚠️ OnchainOS dossier is NULL or empty. Treat this as a DATA GAP - every claim is LLM-knowledge only, not real on-chain data. Downgrade riskScore by 10 points and note "OnchainOS data unavailable" in reasoning.`;
 
   const body = {
     model: config.openai.model,
