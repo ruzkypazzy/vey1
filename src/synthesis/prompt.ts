@@ -97,7 +97,14 @@ export async function synthesizeAudit(
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Analyze this project:\n\n${JSON.stringify(payload, null, 2)}\n\nReturn JSON with this exact shape:\n{\n  "riskScore": <0-100>,\n  "recommendation": "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID",\n  "reasoning": "<3-6 sentence narrative citing specific evidence>",\n  "topRisks": ["<risk 1>", "<risk 2>", "<risk 3>"],\n  "flags": [{"color": "RED|YELLOW|GREEN", "category": "<str>", "message": "<str>", "evidence": "<optional>"}],\n  "comparableProjects": [{"name": "<str>", "role": "<str or 'n/a'>", "year": <number or null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}],\n  "teamEnrichment": [{"name": "<str>", "role": "<str>", "pastProjects": [{"name": "<str>", "role": "<str>", "year": <number|null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}]}]\n}`,
+        content: `⚠️ CRITICAL: The project being audited is "${identity.canonicalName}"${identity.ticker ? ` (ticker: $${identity.ticker})` : ""}${identity.contractAddress ? `, contract: ${identity.contractAddress}` : ""}${identity.chain ? ` on ${identity.chain}` : ""}.
+
+Do NOT confuse this with any other project. All your analysis MUST be about "${identity.canonicalName}" specifically.
+
+Project data:
+${JSON.stringify(payload, null, 2)}
+
+Return JSON with this exact shape:\n{\n  "riskScore": <0-100>,\n  "recommendation": "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID",\n  "reasoning": "<3-6 sentence narrative about ${identity.canonicalName} citing specific evidence>",\n  "topRisks": ["<risk 1>", "<risk 2>", "<risk 3>"],\n  "flags": [{"color": "RED|YELLOW|GREEN", "category": "<str>", "message": "<str>", "evidence": "<optional>"}],\n  "comparableProjects": [{"name": "<str>", "role": "<str or 'n/a'>", "year": <number or null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}],\n  "teamEnrichment": [{"name": "<str>", "role": "<str>", "pastProjects": [{"name": "<str>", "role": "<str>", "year": <number|null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}]}]\n}`,
       },
     ],
     temperature: 0.2,
