@@ -13,6 +13,7 @@ import { auditWallet } from "../audit/onchain.js";
 import { buildTeam } from "../audit/team.js";
 import { synthesizeAudit, buildReport } from "./prompt.js";
 import { buildDossier, checkOnchainosAvailable, canMakePaidCalls, type OnchainDossier } from "../services/onchainos.js";
+import { researchProject, getNewsForProject, getRiskEvidence, type ResearchReport } from "../services/research.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -128,6 +129,32 @@ export async function runAudit(
     });
   }
 
+  // Stage 3.5: web research via Tavily + GitHub + CoinGecko (offchain context — the
+  // bulk of the report). This runs BEFORE OnchainOS so we have project identity +
+  // market context + recent news to feed the LLM.
+  let research: ResearchReport | null = null;
+  if (process.env.TAVILY_API_KEY || process.env.RESEARCH_DISABLED !== "1") {
+    try {
+      research = await researchProject(input.query, {
+        includeGithub: true,
+        includeCoinGecko: true,
+        onProgress: (stage, info) => {
+          evidence.push({ type: "research", ref: stage, note: info });
+        },
+      });
+      evidence.push({
+        type: "research",
+        ref: "summary",
+        note: `tavily=${research.totalCost} calls, ${research.findings.length} findings, ${research.searchQueries.length} queries`,
+      });
+    } catch (e) {
+      console.error(`[orchestrator] research failed: ${e instanceof Error ? e.message : String(e)}`);
+      evidence.push({ type: "error", ref: "research", note: String(e) });
+    }
+  } else {
+    evidence.push({ type: "info", ref: "research", note: "disabled" });
+  }
+
   // Stage 4: build team (now informed by the dossier's deployer + other tokens)
   const candidateNames = candidates.map((c) => c.name ?? "").filter(Boolean);
   const teamResult = await buildTeam({
@@ -144,6 +171,7 @@ export async function runAudit(
       twitters,
       githubs,
       dossier: dossier ?? undefined,
+      research: research ?? undefined,
     });
   } catch (e) {
     console.error(`[orchestrator] synth FAILED: ${e instanceof Error ? e.stack : String(e)}`);

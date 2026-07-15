@@ -8,9 +8,9 @@
 // We use gpt-4o-mini via the OpenAI-compatible API (FreeModel.dev by
 // default; swap OPENAI_BASE_URL to use OpenAI directly).
 
-import { request } from "undici";
 import { config } from "../config/secrets.js";
 import type { OnchainDossier } from "../services/onchainos.js";
+import type { ResearchReport } from "../services/research.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -124,10 +124,27 @@ export async function synthesizeAudit(
   const dossier = extraSignals.dossier as OnchainDossier | undefined;
 
   // Build a compact evidence payload
+  const research = extraSignals.research as ResearchReport | undefined;
+
+  // Truncate research findings to keep prompt size manageable
+  const truncatedResearch = research
+    ? {
+        query: research.query,
+        resolvedProjectName: research.resolvedProjectName,
+        officialWebsite: research.officialWebsite,
+        officialTwitter: research.officialTwitter,
+        githubRepo: research.githubRepo,
+        marketContext: research.marketContext,
+        findings: research.findings.slice(0, 30), // cap at 30 findings
+        searchQueries: research.searchQueries,
+      }
+    : null;
+
   const payload = {
     projectName: identity.canonicalName,
     identity,
     dossier: dossier ?? null, // ← real on-chain evidence, not LLM memory
+    research: truncatedResearch, // ← real offchain web research (Tavily + GitHub + CoinGecko)
     projectWallets: projectWallets.map((w) => ({
       address: w.address,
       label: w.label,
@@ -157,7 +174,11 @@ export async function synthesizeAudit(
 
   const dossierNote = dossier
     ? `Real OnchainOS dossier attached (cost: ${dossier.costUsdt0.toFixed(4)} USDT0 from Agentic Wallet). CITE IT in your reasoning with explicit "Per okx-<skill>:" prefixes.`
-    : `⚠️ OnchainOS dossier is NULL or empty. Treat this as a DATA GAP - every claim is LLM-knowledge only, not real on-chain data. Downgrade riskScore by 10 points and note "OnchainOS data unavailable" in reasoning.`;
+    : `OnchainOS dossier is empty or null — the project's on-chain data isn't indexed by OnchainOS yet. Use the web research (Per tavily-search: / Per github: / Per coingecko:) as the primary evidence, and your public-record knowledge as the secondary source.`;
+
+  const researchNote = research
+    ? `Real web research attached (${research.findings.length} findings from ${research.searchQueries.length} searches via Tavily + GitHub + CoinGecko). CITE IT in your reasoning with "Per tavily-search: ...", "Per github: ...", "Per coingecko: ..." prefixes. ${research.officialWebsite ? `Official website: ${research.officialWebsite}. ` : ""}${research.officialTwitter ? `Twitter: ${research.officialTwitter}. ` : ""}${research.githubRepo ? `GitHub: ${research.githubRepo}. ` : ""}${research.marketContext ? `Market: rank #${research.marketContext.rank}, market cap $${research.marketContext.marketCapUsd?.toLocaleString()}, TVL $${research.marketContext.tvlUsd?.toLocaleString()}.` : ""}`
+    : `No web research available — rely on the dossier and your public-record knowledge.`;
 
   const body = {
     model: config.openai.model,
@@ -171,8 +192,10 @@ Do NOT confuse this with any other project. All your analysis MUST be about "${i
 
 ${dossierNote}
 
+${researchNote}
+
 Project data (JSON):
-${JSON.stringify(payload, null, 2)}
+${JSON.stringify(payload, null, 2).slice(0, 18000)}
 
 Return JSON with this exact shape:
 {
@@ -190,23 +213,22 @@ Return JSON with this exact shape:
     max_tokens: 2000,
   };
 
-  const res = await request(`${config.openai.baseUrl}/chat/completions`, {
+  const res = await fetch(`${config.openai.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.openai.apiKey}`,
     },
     body: JSON.stringify(body),
-    headersTimeout: 30_000,
-    bodyTimeout: 60_000,
+    signal: AbortSignal.timeout(60_000),
   });
 
-  if (res.statusCode >= 400) {
-    const text = await res.body.text();
-    throw new Error(`LLM API error ${res.statusCode}: ${text.slice(0, 300)}`);
+  if (res.status >= 400) {
+    const text = await res.text();
+    throw new Error(`LLM API error ${res.status}: ${text.slice(0, 300)}`);
   }
 
-  const json = (await res.body.json()) as {
+  const json = (await res.json()) as {
     choices: { message: { content: string } }[];
   };
   const raw = json.choices[0]?.message?.content ?? "{}";
