@@ -316,7 +316,7 @@ export async function getTokenNews(symbol: string, limit = 10): Promise<Sentimen
 // ─── 4. Security scan (honeypot, risk score, mint authority) ───────────────
 
 export async function getSecurityScan(address: string, chain: Chain): Promise<SecurityScan> {
-  return paidCall<SecurityScan>(
+  const result = await paidCall<unknown>(
     ["security", "token-scan", "--address", address, "--chain", chain],
     {
       address,
@@ -333,6 +333,77 @@ export async function getSecurityScan(address: string, chain: Chain): Promise<Se
     },
     "security",
   );
+  // Unwrap the response: { ok: true, data: [...] } or { ok: true, data: {...} }
+  // If data is empty array, return mock (token not found in their security DB).
+  if (result && typeof result === "object") {
+    const r = result as any;
+    const data = r.data;
+    // If data is empty array or null, return the mock default
+    if (Array.isArray(data) && data.length === 0) {
+      return {
+        address,
+        riskLevel: "unknown" as any,
+        riskScore: 0,
+        isHoneypot: false,
+        canSell: true,
+        cannotBuy: false,
+        cannotSell: false,
+        hasRenounced: false,
+        hasMintFunction: false,
+        suspiciousFlags: [],
+        source: "okx-security" as const,
+      };
+    }
+    // If data is an object, normalize it
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      return {
+        address: data.address ?? address,
+        riskLevel: (data.riskLevel ?? "unknown") as any,
+        riskScore: data.riskScore ?? 0,
+        isHoneypot: data.isHoneypot ?? false,
+        canSell: data.canSell ?? true,
+        cannotBuy: data.cannotBuy ?? false,
+        cannotSell: data.cannotSell ?? false,
+        hasRenounced: data.hasRenounced ?? false,
+        hasMintFunction: data.hasMintFunction ?? false,
+        holderConcentration: data.holderConcentration,
+        suspiciousFlags: data.suspiciousFlags ?? [],
+        source: "okx-security" as const,
+      };
+    }
+    // If data is a non-empty array, take the first element
+    if (Array.isArray(data) && data.length > 0) {
+      const t = data[0];
+      return {
+        address: t.address ?? address,
+        riskLevel: (t.riskLevel ?? "unknown") as any,
+        riskScore: t.riskScore ?? 0,
+        isHoneypot: t.isHoneypot ?? false,
+        canSell: t.canSell ?? true,
+        cannotBuy: t.cannotBuy ?? false,
+        cannotSell: t.cannotSell ?? false,
+        hasRenounced: t.hasRenounced ?? false,
+        hasMintFunction: t.hasMintFunction ?? false,
+        holderConcentration: t.holderConcentration,
+        suspiciousFlags: t.suspiciousFlags ?? [],
+        source: "okx-security" as const,
+      };
+    }
+  }
+  // Fallback to mock default
+  return {
+    address,
+    riskLevel: "unknown" as any,
+    riskScore: 0,
+    isHoneypot: false,
+    canSell: true,
+    cannotBuy: false,
+    cannotSell: false,
+    hasRenounced: false,
+    hasMintFunction: false,
+    suspiciousFlags: [],
+    source: "okx-security" as const,
+  };
 }
 
 // ─── 5. Wallet analysis (deployer wallet PnL, win rate, history) ───────────
