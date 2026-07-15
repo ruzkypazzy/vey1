@@ -270,11 +270,16 @@ export async function getTokensByDeployer(deployerAddress: string, chain: Chain)
 // ─── 3. Smart money / KOL signals ──────────────────────────────────────────
 
 export async function getSmartMoneySignals(tokenAddress: string, chain: Chain): Promise<SmartMoneySignal[]> {
-  return paidCall<SmartMoneySignal[]>(
+  const result = await paidCall<unknown>(
     ["signal", "list", "--chain", chain, "--token-address", tokenAddress, "--limit", "10"],
     [],
     "signal",
   );
+  // Unwrap { ok: true, data: [...] }
+  if (result && typeof result === "object" && "data" in (result as any)) {
+    return ((result as any).data as any[]) ?? [];
+  }
+  return (result as SmartMoneySignal[]) ?? [];
 }
 
 export async function getTokenSentiment(symbol: string, tokenAddress?: string, chain: Chain = "ethereum"): Promise<SentimentSignal> {
