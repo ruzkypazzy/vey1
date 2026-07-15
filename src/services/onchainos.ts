@@ -298,11 +298,19 @@ export async function getTokenSentiment(symbol: string, tokenAddress?: string, c
 }
 
 export async function getTokenNews(symbol: string, limit = 10): Promise<SentimentSignal["topNews"]> {
-  return paidCall<SentimentSignal["topNews"]>(
+  const result = await paidCall<unknown>(
     ["social", "news-by-symbol", "--token-symbols", symbol, "--limit", String(limit)],
     [],
     "news",
   );
+  // Response shape: { data: { articles: [...], cursor: "" } }
+  if (result && typeof result === "object" && "data" in (result as any)) {
+    const d = (result as any).data;
+    if (Array.isArray(d)) return d;
+    if (d?.articles && Array.isArray(d.articles)) return d.articles;
+    return [];
+  }
+  return [];
 }
 
 // ─── 4. Security scan (honeypot, risk score, mint authority) ───────────────
