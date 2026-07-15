@@ -112,14 +112,14 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
       <tr><th>Vibe score</th><td><strong>${sent.sentimentScore}/100</strong> ${sent.sentimentScore < 30 ? "(extreme fear)" : sent.sentimentScore < 50 ? "(bearish)" : sent.sentimentScore < 70 ? "(neutral)" : "(greedy)"}</td></tr>
       ${sent.vibeRank != null ? `<tr><th>Vibe rank</th><td>#${sent.vibeRank}</td></tr>` : ""}
       ${sent.newsCount24h != null ? `<tr><th>News in 24h</th><td>${sent.newsCount24h}</td></tr>` : ""}
-      ${sent.topKOLs && sent.topKOLs.length > 0 ? `<tr><th>Top KOLs</th><td>${sent.topKOLs.slice(0, 5).map((k) => `@${escapeHtml(k.handle)} (influence: ${k.influence})`).join(", ")}</td></tr>` : ""}
+      ${sent.topKOLs && sent.topKOLs.length > 0 ? `<tr><th>Top KOLs</th><td>${sent.topKOLs.slice(0, 5).map((k) => `@${escapeHtml(String(k.handle ?? k.twitterHandle ?? "anonymous"))} (influence: ${k.influence ?? "n/a"})`).join(", ")}</td></tr>` : ""}
     </table>` : "";
 
   // News panel
   const newsPanel = (news?.length ?? 0) > 0 ? `
     <h3>Recent news <span class="muted small">(okx-dex-social, cited)</span></h3>
     <ol class="news-list">
-      ${news.slice(0, 8).map((n) => `<li><strong>${escapeHtml(n.title)}</strong> — <a href="${escapeHtml(n.url)}">${escapeHtml(n.source)}</a> <span class="muted">${n.publishedAt ? new Date(n.publishedAt).toISOString().slice(0, 10) : ""}</span></li>`).join("")}
+      ${news.slice(0, 8).map((n) => `<li><strong>${escapeHtml(String(n.title ?? "Untitled"))}</strong> — <a href="${escapeHtml(String(n.url ?? "#"))}">${escapeHtml(String(n.source ?? "Unknown"))}</a> <span class="muted">${n.publishedAt ? new Date(n.publishedAt).toISOString().slice(0, 10) : ""}</span></li>`).join("")}
     </ol>` : "";
 
   // Wallet PnL panel
