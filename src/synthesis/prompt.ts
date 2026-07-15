@@ -85,7 +85,6 @@ export async function synthesizeAudit(
   enrichedTeam: TeamMember[];
 }> {
   const dossier = extraSignals.dossier as OnchainDossier | undefined;
-  console.log(`[synthesize] identity=${identity.canonicalName}, dossier=${dossier ? `resolvedToken=${dossier.resolvedToken?.symbol}` : "null"}`);
 
   // Build a compact evidence payload
   const payload = {
@@ -168,7 +167,6 @@ Return JSON with this exact shape:
     const text = await res.body.text();
     throw new Error(`LLM API error ${res.statusCode}: ${text.slice(0, 300)}`);
   }
-  console.log(`[synthesize] LLM responded successfully for ${identity.canonicalName}`);
 
   const json = (await res.body.json()) as {
     choices: { message: { content: string } }[];
@@ -229,7 +227,6 @@ export function buildReport(
   dataConfidence: number,
   dossier?: OnchainDossier | null,
 ): AuditReport {
-  console.log(`[buildReport] project=${identity.canonicalName}, hasDossier=${!!dossier}, hasHolders=${!!dossier?.holders}, hasDeployer=${!!dossier?.deployerReputation}, otherTokensLen=${dossier?.deployerReputation?.otherTokens?.length}, smartMoneyLen=${dossier?.smartMoney?.length}, recentNewsLen=${dossier?.recentNews?.length}`);
   return {
     id: `TL-${startedAt.getUTCFullYear()}-${String(startedAt.getUTCMonth() + 1).padStart(2, "0")}-${String(startedAt.getUTCDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
     identity,
