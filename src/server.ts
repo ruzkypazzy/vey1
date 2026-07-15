@@ -53,6 +53,55 @@ async function main() {
     reply.code(402).send(challenge);
   });
 
+  // Free demo endpoint — runs an audit on 3 preset projects (no x402)
+  // Used by the landing page "Try a demo" buttons
+  app.post("/v1/demo", async (req, reply) => {
+    const body = (req.body ?? {}) as { target?: string };
+    const target = body.target ?? "uniswap";
+    const demoTargets: Record<string, string> = {
+      uniswap: "https://uniswap.org",
+      hyperliquid: "Hyperliquid",
+      safereum: "SafeMoon",  // a known-bad example to show the AVOID verdict
+    };
+    const query = demoTargets[target] ?? "Uniswap";
+    try {
+      const { report, durationMs } = await runAudit({ query });
+      const pdf = await renderReportPdf(report);
+      reply.send({
+        reportId: report.id,
+        project: report.identity.canonicalName,
+        riskScore: report.audit.riskScore,
+        recommendation: report.audit.recommendation,
+        reasoning: report.audit.reasoning,
+        flags: report.audit.flags,
+        comparableProjects: report.audit.comparableProjects,
+        team: report.audit.team.map((t) => ({
+          name: t.name,
+          role: t.role,
+          riskScore: t.riskScore,
+          identityConfidence: t.identityConfidence,
+          pastProjects: t.pastProjects,
+        })),
+        pdf: pdf.pdfPath
+          ? {
+              path: pdf.pdfPath,
+              url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
+              pageCount: pdf.pageCount,
+            }
+          : null,
+        html: {
+          url: `${config.publicBaseUrl}/reports/${report.id}.html`,
+          pageCount: pdf.pageCount,
+        },
+        durationMs,
+        completedAt: report.completedAt,
+      });
+    } catch (e) {
+      app.log.error(e);
+      reply.code(500).send({ error: String(e) });
+    }
+  });
+
   // The actual audit endpoint — paywalled
   app.post("/v1/audit", async (req, reply) => {
     const paymentHeader = req.headers["x-payment"];

@@ -3,229 +3,725 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>VEY1 — Crypto Project Due Diligence Agent</title>
-  <meta name="description" content="Forensic crypto project audits. Pass a project name, get a 12-18 page PDF report covering team, wallets, and on-chain history." />
+  <title>VEY1 — Forensic crypto project due diligence</title>
+  <meta name="description" content="Pass a project name, get a 12-18 page PDF report covering team, wallets, on-chain history. Powered by OKX OnchainOS, LLM-synthesized, x402 paywalled." />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta property="og:title" content="VEY1 — Crypto project due diligence" />
+  <meta property="og:description" content="Forensic due diligence for any crypto project. Team, wallets, on-chain history — checked. Returns a 12-18 page PDF." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <style>
+    /* ============================================================
+       VEY1 — design system
+       Dark, forensic, editorial. High information density.
+       ============================================================ */
+    :root {
+      --bg: #08090c;
+      --bg-elev: #11131a;
+      --bg-elev-2: #181a24;
+      --border: #232634;
+      --border-bright: #353849;
+      --text: #e8eaf0;
+      --text-dim: #9ca0b3;
+      --text-mute: #6b6e80;
+      --accent: #f59e0b;       /* amber, like a forensic stamp */
+      --accent-2: #ef4444;     /* red flag */
+      --accent-3: #10b981;     /* green flag */
+      --accent-4: #3b82f6;     /* info blue */
+      --shadow-lg: 0 24px 60px -20px rgba(0,0,0,0.6);
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.4);
+      --radius: 6px;
+      --radius-lg: 12px;
+      --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+    }
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
     body {
-      margin: 0;
-      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 20px;
-    }
-    .container { max-width: 720px; width: 100%; }
-    .brand {
-      font-size: 14px;
-      letter-spacing: 0.4em;
-      color: #6b7280;
-      margin-bottom: 16px;
-    }
-    h1 {
-      font-size: 48px;
-      line-height: 1.1;
-      margin: 0 0 20px 0;
-      font-weight: 700;
-      background: linear-gradient(135deg, #fafafa 0%, #a3a3a3 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .tag {
-      font-size: 18px;
-      color: #9ca3af;
-      margin-bottom: 36px;
-      line-height: 1.5;
-    }
-    .form {
-      background: #171717;
-      border: 1px solid #262626;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 24px;
-    }
-    label {
-      display: block;
-      font-size: 13px;
-      color: #9ca3af;
-      margin-bottom: 8px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 14px 16px;
-      background: #0a0a0a;
-      border: 1px solid #404040;
-      border-radius: 8px;
-      color: #fafafa;
-      font-size: 16px;
-      font-family: inherit;
-      margin-bottom: 16px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    input[type="text"]:focus { border-color: #6b7280; }
-    .row { display: flex; gap: 12px; align-items: center; }
-    .price {
-      font-size: 13px;
-      color: #9ca3af;
-      flex: 1;
-    }
-    .price strong { color: #fafafa; }
-    button {
-      background: #fafafa;
-      color: #0a0a0a;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 8px;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", "Inter", sans-serif;
       font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s, background 0.15s;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
-    button:hover { background: #e5e5e5; }
-    button:active { transform: scale(0.98); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-      margin-top: 24px;
+    a { color: inherit; text-decoration: none; }
+    code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* -------- nav -------- */
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: blur(12px);
+      background: rgba(8,9,12,0.78);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px; max-width: 1120px; margin: 0 auto;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; letter-spacing: 0.02em;
+    }
+    .nav-brand .mark {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #0a0a0a;
+      border-radius: 4px; font-weight: 800; font-size: 14px;
+    }
+    .nav-links { display: flex; gap: 26px; font-size: 14px; color: var(--text-dim); }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; background: var(--accent); color: #0a0a0a;
+      border-radius: var(--radius); font-weight: 600; font-size: 13px;
+    }
+    .nav-cta:hover { background: #fbbf24; }
+
+    /* -------- hero -------- */
+    .hero {
+      position: relative;
+      padding: 88px 0 80px;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 30% 0%, rgba(245,158,11,0.12), transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(59,130,246,0.08), transparent 50%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      position: relative; z-index: 1;
+      display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 10px; border: 1px solid var(--border-bright);
+      border-radius: 999px; font-size: 12px; color: var(--text-dim);
+      background: rgba(255,255,255,0.02); margin-bottom: 22px;
+    }
+    .eyebrow .dot { width: 6px; height: 6px; background: var(--accent-3); border-radius: 999px; }
+    h1 {
+      font-size: 56px; line-height: 1.05; margin: 0 0 22px;
+      font-weight: 800; letter-spacing: -0.025em;
+    }
+    h1 .accent { color: var(--accent); }
+    .lede {
+      font-size: 18px; line-height: 1.6; color: var(--text-dim);
+      max-width: 520px; margin: 0 0 32px;
+    }
+    .hero-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 22px; border-radius: var(--radius);
+      font-weight: 600; font-size: 15px;
+      border: 1px solid transparent; cursor: pointer;
+      transition: transform .1s, background .15s, border-color .15s;
+    }
+    .btn-primary { background: var(--accent); color: #0a0a0a; }
+    .btn-primary:hover { background: #fbbf24; }
+    .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-bright); }
+    .btn-ghost:hover { background: var(--bg-elev); }
+    .btn:active { transform: translateY(1px); }
+    .meta {
+      display: flex; gap: 24px; margin-top: 36px;
+      font-size: 13px; color: var(--text-mute);
+    }
+    .meta strong { color: var(--text-dim); font-weight: 500; }
+
+    /* -------- hero demo card -------- */
+    .demo-card {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .demo-tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+      background: var(--bg-elev-2);
+    }
+    .demo-tab {
+      flex: 1; padding: 12px 16px; font-size: 13px;
+      color: var(--text-mute); cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .demo-tab:hover { color: var(--text-dim); }
+    .demo-tab.active { color: var(--text); border-bottom-color: var(--accent); background: var(--bg-elev); }
+    .demo-body { padding: 22px; }
+    .demo-input-row {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .demo-input {
+      flex: 1; padding: 11px 14px;
+      background: var(--bg); border: 1px solid var(--border-bright);
+      border-radius: var(--radius); color: var(--text);
+      font-family: var(--font-mono); font-size: 14px; outline: none;
+    }
+    .demo-input:focus { border-color: var(--accent); }
+    .demo-run {
+      padding: 11px 18px; background: var(--accent); color: #0a0a0a;
+      border: none; border-radius: var(--radius);
+      font-weight: 600; font-size: 14px; cursor: pointer;
+    }
+    .demo-run:hover { background: #fbbf24; }
+    .demo-run:disabled { opacity: 0.5; cursor: not-allowed; }
+    .demo-hint { font-size: 12px; color: var(--text-mute); margin-bottom: 12px; }
+    .demo-progress {
+      display: none; padding: 18px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 12px; font-size: 13px;
+    }
+    .demo-progress.show { display: block; }
+    .progress-line { color: var(--text-dim); margin-bottom: 6px; }
+    .progress-line.done { color: var(--accent-3); }
+    .progress-line.current { color: var(--accent); }
+    .progress-bar {
+      height: 4px; background: var(--border); border-radius: 999px;
+      overflow: hidden; margin-top: 10px;
+    }
+    .progress-bar-fill {
+      height: 100%; background: var(--accent); width: 0%;
+      transition: width .3s ease;
+    }
+    .demo-output { display: none; }
+    .demo-output.show { display: block; }
+    .result-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; background: var(--bg-elev-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .result-name { font-weight: 700; font-size: 16px; }
+    .result-actions { display: flex; gap: 8px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+    }
+    .pill-low { background: rgba(16,185,129,0.15); color: var(--accent-3); }
+    .pill-med { background: rgba(245,158,11,0.15); color: var(--accent); }
+    .pill-high { background: rgba(239,68,68,0.15); color: var(--accent-2); }
+    .pill-crit { background: rgba(239,68,68,0.3); color: #fff; }
+    .result-body { padding: 18px; }
+    .score-row {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 16px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 14px;
+    }
+    .score-num { font-size: 36px; font-weight: 800; letter-spacing: -0.02em; }
+    .score-meta { flex: 1; }
+    .score-meta .lbl { font-size: 12px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.05em; }
+    .score-meta .rec { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    .score-bar {
+      height: 6px; background: var(--border); border-radius: 999px;
+      overflow: hidden; flex: 1; max-width: 220px;
+    }
+    .score-bar-fill { height: 100%; transition: width .4s ease; }
+    .reasoning {
+      font-size: 14px; color: var(--text-dim); line-height: 1.65;
+      padding: 14px 16px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 14px;
+    }
+    .flags-list { display: flex; flex-direction: column; gap: 8px; }
+    .flag {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .flag-color {
+      flex-shrink: 0; padding: 2px 8px; border-radius: 3px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .flag-RED .flag-color { background: rgba(239,68,68,0.2); color: var(--accent-2); }
+    .flag-YELLOW .flag-color { background: rgba(245,158,11,0.2); color: var(--accent); }
+    .flag-GREEN .flag-color { background: rgba(16,185,129,0.2); color: var(--accent-3); }
+    .flag-body { flex: 1; }
+    .flag-cat { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+    .flag-msg { margin-top: 2px; color: var(--text); }
+    .compare {
+      margin-top: 14px; padding: 12px 14px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .compare-title { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+    .compare-row { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--border); }
+    .compare-row:first-of-type { border-top: none; }
+    .compare-name { color: var(--text); }
+    .compare-status { font-size: 12px; }
+    .compare-status.ACTIVE { color: var(--accent-3); }
+    .compare-status.RUGGED, .compare-status.ABANDONED { color: var(--accent-2); }
+    .compare-status.UNKNOWN { color: var(--text-mute); }
+    .download-row {
+      display: flex; gap: 10px; margin-top: 16px; padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .download-btn {
+      flex: 1; padding: 11px; text-align: center;
+      background: var(--bg-elev); border: 1px solid var(--border-bright);
+      border-radius: var(--radius); font-size: 13px; font-weight: 500;
+      color: var(--text); transition: background .15s, border-color .15s;
+    }
+    .download-btn:hover { background: var(--bg-elev-2); border-color: var(--accent); }
+    .download-btn.primary { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+    .download-btn.primary:hover { background: #fbbf24; border-color: #fbbf24; }
+    .demo-helper { font-size: 12px; color: var(--text-mute); margin-top: 12px; text-align: center; }
+    .demo-helper code { background: var(--bg-elev-2); padding: 2px 6px; border-radius: 3px; }
+
+    /* -------- features -------- */
+    .features { padding: 96px 0; border-top: 1px solid var(--border); }
+    .section-eyebrow {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--accent); font-weight: 600; margin-bottom: 14px;
+    }
+    h2 {
+      font-size: 36px; line-height: 1.15; margin: 0 0 16px;
+      font-weight: 700; letter-spacing: -0.02em;
+    }
+    .section-sub { font-size: 17px; color: var(--text-dim); max-width: 640px; margin: 0 0 56px; }
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
     }
     .feature {
-      padding: 12px 14px;
-      background: #0f0f0f;
-      border: 1px solid #1f1f1f;
-      border-radius: 8px;
-      font-size: 13px;
-      color: #9ca3af;
+      padding: 28px 24px; background: var(--bg-elev);
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      transition: border-color .15s, transform .15s;
     }
-    .feature strong { color: #e5e5e5; display: block; margin-bottom: 2px; }
-    .result {
-      background: #171717;
-      border: 1px solid #262626;
-      border-radius: 12px;
-      padding: 24px;
-      margin-top: 24px;
-      display: none;
+    .feature:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+    .feature-icon {
+      width: 38px; height: 38px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(245,158,11,0.12); color: var(--accent);
+      border-radius: var(--radius); font-size: 18px; margin-bottom: 18px;
     }
-    .result.show { display: block; }
-    .result h2 { margin: 0 0 12px 0; font-size: 20px; }
-    .score {
-      display: inline-block;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-weight: 700;
-      margin-right: 8px;
+    .feature h3 { font-size: 17px; margin: 0 0 8px; font-weight: 600; }
+    .feature p { font-size: 14px; color: var(--text-dim); margin: 0; line-height: 1.6; }
+
+    /* -------- how it works -------- */
+    .how { padding: 96px 0; border-top: 1px solid var(--border); background: var(--bg-elev); }
+    .how-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 32px; }
+    .how-step {
+      padding: 22px 20px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      position: relative;
     }
-    .score-low { background: #064e3b; color: #6ee7b7; }
-    .score-medium { background: #78350f; color: #fcd34d; }
-    .score-high { background: #7f1d1d; color: #fca5a5; }
-    .score-critical { background: #450a0a; color: #fecaca; }
-    a.pdf-link {
-      display: inline-block;
-      margin-top: 16px;
-      padding: 10px 20px;
-      background: #262626;
-      color: #fafafa;
-      text-decoration: none;
-      border-radius: 6px;
-      font-size: 14px;
+    .how-num {
+      position: absolute; top: 16px; right: 18px;
+      font-size: 36px; font-weight: 800; color: var(--border-bright);
+      font-family: var(--font-mono); line-height: 1;
     }
-    a.pdf-link:hover { background: #404040; }
-    .footer {
-      margin-top: 36px;
-      font-size: 12px;
-      color: #6b7280;
+    .how-step h4 { font-size: 14px; margin: 0 0 8px; color: var(--accent); }
+    .how-step p { font-size: 13px; color: var(--text-dim); margin: 0; line-height: 1.55; }
+
+    /* -------- pricing -------- */
+    .pricing { padding: 96px 0; border-top: 1px solid var(--border); }
+    .pricing-card {
+      max-width: 520px; margin: 0 auto;
+      padding: 36px; background: var(--bg-elev);
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
       text-align: center;
+    }
+    .price-big { font-size: 64px; font-weight: 800; letter-spacing: -0.03em; margin: 14px 0 6px; }
+    .price-big .currency { font-size: 24px; color: var(--text-dim); vertical-align: top; line-height: 2.6; }
+    .price-big .per { font-size: 16px; color: var(--text-mute); font-weight: 500; }
+    .price-sub { font-size: 14px; color: var(--text-dim); margin-bottom: 26px; }
+    .price-list { list-style: none; padding: 0; margin: 0 0 28px; text-align: left; }
+    .price-list li {
+      padding: 10px 0; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; font-size: 14px;
+    }
+    .price-list li:first-child { border-top: none; }
+    .price-check { color: var(--accent-3); font-weight: 700; }
+
+    /* -------- footer -------- */
+    footer {
+      padding: 40px 0; border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--text-mute);
+    }
+    .footer-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a:hover { color: var(--text-dim); }
+
+    /* -------- responsive -------- */
+    @media (max-width: 880px) {
+      .hero { padding: 56px 0; }
+      .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+      h1 { font-size: 40px; }
+      h2 { font-size: 28px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: 1fr 1fr; }
+      .nav-links { display: none; }
     }
   </style>
 </head>
 <body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <span class="mark">V</span>
+      <span>VEY1</span>
+    </div>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">What it checks</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/v1/info" class="mono">API</a>
+    </div>
+    <a href="#demo" class="nav-cta">Try free demo →</a>
+  </div>
+</nav>
+
+<!-- ─────── HERO ─────── -->
+<section class="hero grid-bg">
   <div class="container">
-    <div class="brand">VEY1</div>
-    <h1>Strip the<br/>project to its<br/>true self.</h1>
-    <p class="tag">Forensic crypto due diligence. Project name in, 12-18 page PDF out. Team, wallets, on-chain history — checked.</p>
-
-    <div class="form">
-      <label for="query">Project name, @handle, contract address, or URL</label>
-      <input type="text" id="query" placeholder="e.g. Hyperliquid, @hyperliquidX, 0x..., https://..." />
-      <div class="row">
-        <div class="price">Cost: <strong>1.50 USDT0</strong> per audit · settled on X Layer</div>
-        <button id="submit" onclick="submit()">Audit project</button>
-      </div>
-    </div>
-
-    <div class="features">
-      <div class="feature"><strong>On-chain audit</strong>Deployer, treasury, multisig</div>
-      <div class="feature"><strong>Team dossiers</strong>Personal wallets, past projects</div>
-      <div class="feature"><strong>Scam database</strong>Cross-reference public flags</div>
-      <div class="feature"><strong>PDF report</strong>12-18 pages, evidence-cited</div>
-    </div>
-
-    <div id="result" class="result">
-      <h2 id="r-project"></h2>
+    <div class="hero-grid">
       <div>
-        <span id="r-score" class="score"></span>
-        <span id="r-rec"></span>
+        <div class="eyebrow"><span class="dot"></span>Live on OKX.AI · x402 paywalled</div>
+        <h1>Strip the project<br>to its <span class="accent">true self</span>.</h1>
+        <p class="lede">
+          Forensic due diligence for any crypto project. Pass a name, a contract, or a URL — get a 12-18 page
+          report covering the team, every wallet, and the on-chain history that actually matters.
+        </p>
+        <div class="hero-actions">
+          <a href="#demo" class="btn btn-primary">Run a free audit →</a>
+          <a href="#how" class="btn btn-ghost">How it works</a>
+        </div>
+        <div class="meta">
+          <div><strong>1.5 USDT0</strong> per audit</div>
+          <div><strong>~5s</strong> end-to-end</div>
+          <div><strong>x402</strong> on X Layer</div>
+        </div>
       </div>
-      <p id="r-reasoning" style="color:#9ca3af;margin-top:16px"></p>
-      <a id="r-pdf" class="pdf-link" href="#" target="_blank">Download PDF report →</a>
-    </div>
 
-    <div class="footer">
-      VEY1 · Powered by OKX.AI · x402 payments on X Layer (eip155:196)
+      <!-- Live demo card -->
+      <div class="demo-card" id="demo">
+        <div class="demo-tabs">
+          <div class="demo-tab active" data-target="uniswap">Uniswap (legit)</div>
+          <div class="demo-tab" data-target="hyperliquid">Hyperliquid (mid)</div>
+          <div class="demo-tab" data-target="safereum">SafeMoon (low)</div>
+        </div>
+        <div class="demo-body">
+          <div class="demo-hint">Free demo · runs a real audit, returns a real PDF</div>
+          <div class="demo-input-row">
+            <input type="text" id="demo-input" class="demo-input" value="https://uniswap.org" />
+            <button class="demo-run" id="demo-run">Audit</button>
+          </div>
+          <div class="demo-progress" id="demo-progress">
+            <div class="progress-line current" id="step-1">→ Resolving project identity</div>
+            <div class="progress-line" id="step-2">→ Scraping project surface</div>
+            <div class="progress-line" id="step-3">→ Auditing wallets via OnchainOS</div>
+            <div class="progress-line" id="step-4">→ Building team dossiers</div>
+            <div class="progress-line" id="step-5">→ Synthesizing report with LLM</div>
+            <div class="progress-line" id="step-6">→ Rendering PDF</div>
+            <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+          </div>
+          <div class="demo-output" id="demo-output"></div>
+        </div>
+      </div>
     </div>
   </div>
+</section>
 
-  <script>
-    async function submit() {
-      const query = document.getElementById('query').value.trim();
-      if (!query) return;
-      const btn = document.getElementById('submit');
-      btn.disabled = true;
-      btn.textContent = 'Auditing...';
-      try {
-        // For the demo, we send without a real x402 payment header.
-        // The server returns 402 unless X-PAYMENT is present. We surface
-        // the challenge to the user; production wires up the wallet.
-        const res = await fetch('/v1/audit', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ query }),
-        });
-        if (res.status === 402) {
-          const challenge = await res.json();
-          alert('Payment required: ' + challenge.accepted.maxAmountRequired + ' base units of ' + (challenge.accepted.extra?.name || 'USDT0') + ' on ' + challenge.accepted.network + '.\\nPay to: ' + challenge.accepted.payTo);
-          return;
-        }
-        if (!res.ok) {
-          alert('Audit failed: ' + res.status);
-          return;
-        }
-        const data = await res.json();
-        document.getElementById('r-project').textContent = data.project;
-        const s = data.riskScore;
-        const sc = document.getElementById('r-score');
-        sc.textContent = s + '/100';
-        sc.className = 'score ' + (s >= 80 ? 'score-low' : s >= 60 ? 'score-medium' : s >= 30 ? 'score-high' : 'score-critical');
-        document.getElementById('r-rec').textContent = data.recommendation.replace(/_/g, ' ');
-        document.getElementById('r-reasoning').textContent = data.reasoning;
-        document.getElementById('r-pdf').href = data.pdf.url;
-        document.getElementById('result').classList.add('show');
-      } catch (e) {
-        alert('Error: ' + e.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Audit project';
+<!-- ─────── FEATURES ─────── -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-eyebrow">What VEY1 checks</div>
+    <h2>Forensic depth, not a checklist.</h2>
+    <p class="section-sub">
+      Most "is this project legit?" tools stop at the smart contract. VEY1 audits the people, the wallets, and
+      the history behind it.
+    </p>
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="feature-icon">⛓</div>
+        <h3>On-chain audit</h3>
+        <p>Every project-controlled wallet: deployer, treasury, multisig, fee collector. Funding source,
+          counterparty graph, mixer exposure, OFAC check. Routes through OKX OnchainOS.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">👤</div>
+        <h3>Team dossiers</h3>
+        <p>For each identified team member: identity verification, public social footprint, prior project
+          associations, and personal wallet history including source-of-funds trace.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🛡</div>
+        <h3>Scam database</h3>
+        <p>Cross-references public scam databases (Chainabuse, Etherscan labels) for both project wallets
+          and personal wallets. Each hit cited with evidence.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📄</div>
+        <h3>Forensic PDF</h3>
+        <p>12-18 page report with cover, executive summary, per-person dossier, risk matrix, and
+          comparable projects. Every claim cited (tx hash, address, source URL).</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🤖</div>
+        <h3>LLM synthesis</h3>
+        <p>Adversarial due-diligence prompt. Strict JSON-only output. The synthesis distinguishes facts
+          from inferences and admits uncertainty with a confidence score.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <h3>A2A-native</h3>
+        <p>Single input, agent does everything autonomously. No follow-up questions. Fits the
+          A2A Agent Service Provider pattern that OKX.AI rewards.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────── HOW IT WORKS ─────── -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="section-eyebrow">How it works</div>
+    <h2>One input. Five stages. A real report.</h2>
+    <p class="section-sub">Every audit runs the same pipeline. About 5 seconds end-to-end. Pay per call,
+      no accounts, no signup.</p>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="how-num">1</div>
+        <h4>Resolve</h4>
+        <p>"Uniswap", "@hyperliquidX", "0x…", or a URL all resolve to a canonical project identity.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">2</div>
+        <h4>Scrape</h4>
+        <p>Walk the project site, find the team page, extract founders + their social handles.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">3</div>
+        <h4>Audit on-chain</h4>
+        <p>For every project wallet + personal wallet: funding source, history, counterparty graph,
+          scam DB check.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">4</div>
+        <h4>Synthesize</h4>
+        <p>Adversarial LLM prompt. Returns a 0-100 risk score, red/yellow/green flags, and
+          comparable projects.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-num">5</div>
+        <h4>Render</h4>
+        <p>12-18 page forensic PDF + JSON response. Cite every claim with tx hash, address,
+          or source URL.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────── PRICING ─────── -->
+<section class="pricing" id="pricing">
+  <div class="container">
+    <div class="section-eyebrow">Pricing</div>
+    <h2 style="text-align:center">One price. Pay per call.</h2>
+    <p class="section-sub" style="text-align:center; margin-left:auto; margin-right:auto;">
+      No subscription. No accounts. The agent gets paid when you do.
+    </p>
+    <div class="pricing-card">
+      <div class="section-eyebrow">Per audit</div>
+      <div class="price-big">
+        <span class="currency">$</span>1<span class="currency">.50</span>
+      </div>
+      <div class="price-sub">in USDT0 · settled on X Layer (eip155:196) via x402 v2</div>
+      <ul class="price-list">
+        <li><span class="price-check">✓</span> 12-18 page forensic PDF</li>
+        <li><span class="price-check">✓</span> Full team dossiers with personal wallet history</li>
+        <li><span class="price-check">✓</span> On-chain audit of project + personal wallets</li>
+        <li><span class="price-check">✓</span> Scam database cross-reference</li>
+        <li><span class="price-check">✓</span> Structured JSON response (programmatic access)</li>
+        <li><span class="price-check">✓</span> No signup, no API key, no subscription</li>
+      </ul>
+      <a href="#demo" class="btn btn-primary" style="width:100%; justify-content:center;">Try free demo first</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container footer-inner">
+    <div>
+      <strong style="color:var(--text-dim)">VEY1</strong> · Built for the OKX.AI Genesis Hackathon
+      · x402 v2 on X Layer
+    </div>
+    <div class="footer-links">
+      <a href="/v1/info">API docs</a>
+      <a href="https://github.com/ruzkypazzy/vey1" target="_blank">GitHub</a>
+      <a href="/ready">Status</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ─── demo flow ────────────────────────────────────────────────
+  const TABS = document.querySelectorAll('.demo-tab');
+  const INPUT = document.getElementById('demo-input');
+  const RUN = document.getElementById('demo-run');
+  const PROGRESS = document.getElementById('demo-progress');
+  const PROGRESS_FILL = document.getElementById('progress-fill');
+  const OUTPUT = document.getElementById('demo-output');
+  const STEPS = ['step-1','step-2','step-3','step-4','step-5','step-6'];
+
+  const TARGETS = {
+    uniswap: 'https://uniswap.org',
+    hyperliquid: 'Hyperliquid',
+    safereum: 'SafeMoon',
+  };
+
+  TABS.forEach(tab => {
+    tab.addEventListener('click', () => {
+      TABS.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      INPUT.value = TARGETS[tab.dataset.target];
+    });
+  });
+
+  function setStep(idx, status) {
+    STEPS.forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.classList.remove('done', 'current');
+      if (i < idx) el.classList.add('done');
+      else if (i === idx) el.classList.add(status);
+    });
+    PROGRESS_FILL.style.width = `${Math.min(100, ((idx + 1) / STEPS.length) * 100)}%`;
+  }
+
+  RUN.addEventListener('click', async () => {
+    const target = document.querySelector('.demo-tab.active').dataset.target;
+    RUN.disabled = true;
+    RUN.textContent = 'Auditing...';
+    PROGRESS.classList.add('show');
+    OUTPUT.classList.remove('show');
+    OUTPUT.innerHTML = '';
+    setStep(0, 'current');
+
+    // Animate progress while the real request runs
+    let step = 0;
+    const tick = setInterval(() => {
+      if (step < STEPS.length - 1) { step++; setStep(step, 'current'); }
+    }, 700);
+
+    try {
+      const res = await fetch('/v1/demo', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      clearInterval(tick);
+      if (!res.ok) {
+        PROGRESS.classList.remove('show');
+        RUN.disabled = false;
+        RUN.textContent = 'Audit';
+        OUTPUT.classList.add('show');
+        OUTPUT.innerHTML = `<div class="flag flag-RED"><span class="flag-color">ERR</span><div class="flag-body"><div class="flag-msg">Audit failed: ${res.status}</div></div></div>`;
+        return;
       }
+      const data = await res.json();
+      setStep(STEPS.length - 1, 'done');
+      setTimeout(() => {
+        PROGRESS.classList.remove('show');
+        renderResult(data);
+        RUN.disabled = false;
+        RUN.textContent = 'Audit';
+      }, 400);
+    } catch (e) {
+      clearInterval(tick);
+      PROGRESS.classList.remove('show');
+      RUN.disabled = false;
+      RUN.textContent = 'Audit';
+      OUTPUT.classList.add('show');
+      OUTPUT.innerHTML = `<div class="flag flag-RED"><span class="flag-color">ERR</span><div class="flag-body"><div class="flag-msg">${e.message}</div></div></div>`;
     }
-  </script>
+  });
+
+  function renderResult(data) {
+    const score = data.riskScore ?? 0;
+    const pillClass = score >= 80 ? 'pill-low' : score >= 60 ? 'pill-med' : score >= 30 ? 'pill-high' : 'pill-crit';
+    const barColor = score >= 80 ? 'var(--accent-3)' : score >= 60 ? 'var(--accent)' : 'var(--accent-2)';
+    const recText = (data.recommendation || 'CAUTION').replace(/_/g, ' ');
+
+    let flagsHTML = '';
+    if (data.flags && data.flags.length > 0) {
+      flagsHTML = data.flags.slice(0, 4).map(f => `
+        <div class="flag flag-${f.color}">
+          <span class="flag-color">${f.color}</span>
+          <div class="flag-body">
+            <div class="flag-cat">${escapeHtml(f.category || '')}</div>
+            <div class="flag-msg">${escapeHtml(f.message || '')}</div>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      flagsHTML = '<div style="color:var(--text-mute); font-size:13px; padding:10px;">No material flags surfaced.</div>';
+    }
+
+    let compHTML = '';
+    if (data.comparableProjects && data.comparableProjects.length > 0) {
+      compHTML = `
+        <div class="compare">
+          <div class="compare-title">Comparable projects</div>
+          ${data.comparableProjects.slice(0, 4).map(p => `
+            <div class="compare-row">
+              <span class="compare-name">${escapeHtml(p.name)} ${p.year ? `<span style="color:var(--text-mute)">· ${p.year}</span>` : ''}</span>
+              <span class="compare-status ${p.status}">${escapeHtml(p.status)}${p.outcome ? ' · ' + escapeHtml(p.outcome.slice(0, 40)) : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    const reasoning = data.reasoning ? data.reasoning.slice(0, 400) + (data.reasoning.length > 400 ? '…' : '') : 'No reasoning provided.';
+
+    OUTPUT.innerHTML = `
+      <div class="result-head">
+        <div>
+          <div style="font-size:11px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Audit report</div>
+          <div class="result-name">${escapeHtml(data.project || 'Unknown project')}</div>
+        </div>
+        <div class="result-actions">
+          <span class="pill ${pillClass}">${score}/100 · ${recText}</span>
+        </div>
+      </div>
+      <div class="result-body">
+        <div class="score-row">
+          <div class="score-num" style="color:${barColor}">${score}</div>
+          <div class="score-meta">
+            <div class="lbl">Risk score</div>
+            <div class="rec">${recText}</div>
+          </div>
+          <div class="score-bar"><div class="score-bar-fill" style="width:${score}%; background:${barColor}"></div></div>
+        </div>
+        <div class="reasoning">${escapeHtml(reasoning)}</div>
+        <div style="font-size:12px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.04em; margin:18px 0 10px;">Top flags</div>
+        <div class="flags-list">${flagsHTML}</div>
+        ${compHTML}
+        <div class="download-row">
+          <a href="${data.html?.url || '#'}" target="_blank" class="download-btn primary">View full report →</a>
+          <a href="/v1/info" class="download-btn">Call via API</a>
+        </div>
+        <div class="demo-helper">
+          Demo runs are free. For any other project, call <code>POST /v1/audit</code> with x402 payment
+          (1.5 USDT0) to get a fresh report.
+        </div>
+      </div>
+    `;
+    OUTPUT.classList.add('show');
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+</script>
+
 </body>
 </html>
