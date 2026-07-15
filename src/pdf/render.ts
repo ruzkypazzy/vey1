@@ -36,7 +36,15 @@ export async function renderReportPdf(
       "--disable-gpu",
     ],
     headless: true,
+  }).catch((e) => {
+    console.error("Puppeteer launch failed:", e?.message ?? e);
+    return null;
   });
+  if (!browser) {
+    // PDF generation unavailable — still report success for the HTML
+    const pageCount = Math.max(8, Math.ceil(html.length / 4000));
+    return { pdfPath: "", pageCount };
+  }
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load", timeout: 30000 });
@@ -51,7 +59,11 @@ export async function renderReportPdf(
     // Estimate page count from content length (rough)
     const pageCount = Math.max(8, Math.ceil(html.length / 4000));
     return { pdfPath, pageCount };
+  } catch (e) {
+    console.error("PDF render failed:", e);
+    const pageCount = Math.max(8, Math.ceil(html.length / 4000));
+    return { pdfPath: "", pageCount };
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
   }
 }

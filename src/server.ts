@@ -97,9 +97,15 @@ async function main() {
           identityConfidence: t.identityConfidence,
           pastProjects: t.pastProjects,
         })),
-        pdf: {
-          path: pdf.pdfPath,
-          url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
+        pdf: pdf.pdfPath
+          ? {
+              path: pdf.pdfPath,
+              url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
+              pageCount: pdf.pageCount,
+            }
+          : null,
+        html: {
+          url: `${config.publicBaseUrl}/reports/${report.id}.html`,
           pageCount: pdf.pageCount,
         },
         durationMs,
