@@ -612,25 +612,58 @@ export async function getAgenticWalletBalance(): Promise<number> {
     console.log(`[onchainos:balance] stdout=${stdout.slice(0, 500)} stderr=${stderr.slice(0, 200)}`);
     const json = JSON.parse(stdout.trim());
     // Try multiple response shapes — the CLI's response format has changed
-    // between versions. Most common: { data: { totalAssets: "1.5" } } or
-    // { data: { balance: "1.5" } } or { data: [{ symbol: "USDT0", balance: "1.5" }] }
+    // between versions. The current (v4.2.4) response is:
+    //   { data: { details: [{ tokenAssets: [{ symbol: "USD₮0", balance: "0.06", ... }] }], totalValueUsd: "0.06" } }
     let balance = 0;
     const data = json?.data;
+
+    // Helper: find USDT0 in any list
+    const findUsdt0 = (list: any[]) => {
+      if (!Array.isArray(list)) return null;
+      return list.find(
+        (t: any) =>
+          t?.symbol === "USDT0" ||
+          t?.symbol === "USD₮0" ||
+          t?.tokenSymbol === "USDT0" ||
+          t?.tokenSymbol === "USD₮0",
+      );
+    };
+
     if (typeof data === "number" || typeof data === "string") {
       balance = parseFloat(String(data));
     } else if (data?.totalAssets) {
       balance = parseFloat(data.totalAssets);
     } else if (data?.balance) {
       balance = parseFloat(data.balance);
+    } else if (data?.totalValueUsd) {
+      // Newest shape: walk through details[].tokenAssets[]
+      if (Array.isArray(data.details)) {
+        for (const detail of data.details) {
+          const usdt0 = findUsdt0(detail?.tokenAssets ?? []);
+          if (usdt0) {
+            balance = parseFloat(usdt0.balance ?? "0");
+            break;
+          }
+        }
+      }
+      if (balance === 0) balance = parseFloat(data.totalValueUsd);
     } else if (Array.isArray(data)) {
-      const usdt0 = data.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      const usdt0 = findUsdt0(data);
       balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
     } else if (data?.tokens && Array.isArray(data.tokens)) {
-      const usdt0 = data.tokens.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      const usdt0 = findUsdt0(data.tokens);
       balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
     } else if (data?.assets && Array.isArray(data.assets)) {
-      const usdt0 = data.assets.find((t: any) => t?.symbol === "USDT0" || t?.tokenSymbol === "USDT0");
+      const usdt0 = findUsdt0(data.assets);
       balance = parseFloat(usdt0?.balance ?? usdt0?.totalAssets ?? "0");
+    } else if (data?.details && Array.isArray(data.details)) {
+      for (const detail of data.details) {
+        const usdt0 = findUsdt0(detail?.tokenAssets ?? []);
+        if (usdt0) {
+          balance = parseFloat(usdt0.balance ?? "0");
+          break;
+        }
+      }
     }
     console.log(`[onchainos:balance] parsed=${balance} from ${JSON.stringify(data).slice(0, 300)}`);
     cachedBalance = { balance, ts: Date.now() };
