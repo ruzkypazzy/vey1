@@ -140,6 +140,35 @@ export interface AuditReport {
   evidence: { type: string; ref: string; note?: string }[];
   /** Confidence in the audit's completeness (0-1) */
   dataConfidence: number;
+  /** Real web research evidence (Tavily + GitHub + CoinGecko) */
+  research?: {
+    query: string;
+    resolvedProjectName?: string;
+    officialWebsite?: string;
+    officialTwitter?: string;
+    githubRepo?: string;
+    whitepaperUrl?: string;
+    marketContext?: {
+      coinGeckoId?: string;
+      rank?: number;
+      marketCapUsd?: number;
+      volume24hUsd?: number;
+      tvlUsd?: number;
+      circulatingSupply?: number;
+      priceUsd?: number;
+      categories?: string[];
+    };
+    findings: Array<{
+      source: string;
+      category: string;
+      title: string;
+      url?: string;
+      content: string;
+      date?: string;
+    }>;
+    searchQueries: string[];
+    totalCost: number;
+  };
   /** Real on-chain evidence from OKX OnchainOS (if available) */
   onchainDossier?: {
     query: string;

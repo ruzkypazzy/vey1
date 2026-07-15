@@ -7,6 +7,7 @@ import type { AuditReport, ProjectAudit, TeamMember, WalletAudit, RiskLevel, Fla
 // Subset of the OnchainDossier that we actually render in the PDF.
 // Matches the structure stored in `AuditReport.onchainDossier` (see types/index.ts).
 type ReportDossier = NonNullable<AuditReport["onchainDossier"]>;
+type ReportResearch = NonNullable<AuditReport["research"]>;
 
 // Helper to format percentage with safety
 function pct(n: number | undefined | null): string {
@@ -20,6 +21,95 @@ function usd(n: number | undefined | null): string {
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
   return `$${n.toFixed(2)}`;
+}
+
+function renderResearchSection(research: ReportResearch): string {
+  if (!research) return "";
+  // 1. Project profile / market data
+  const market = research.marketContext;
+  const summary = research.findings.find((f) => f.category === "summary");
+  const news = research.findings.filter((f) => f.category === "news").slice(0, 5);
+  const risks = research.findings.filter((f) => f.category === "risks").slice(0, 3);
+  const code = research.findings.filter((f) => f.category === "code").slice(0, 2);
+
+  return `
+    <section>
+      <h2>2.5 Web Research Findings</h2>
+      <p class="muted">All data in this section is REAL WEB RESEARCH pulled from public sources (Tavily AI search, GitHub API, CoinGecko free tier). Total: ${research.totalCost} Tavily calls, ${research.findings.length} findings, ${research.searchQueries.length} queries.</p>
+
+      ${
+        market
+          ? `<h3>Market context <span class="muted small">(Per coingecko)</span></h3>
+      <table class="table compact">
+        <tr><th>CoinGecko ID</th><td>${escapeHtml(market.coinGeckoId ?? "")}</td></tr>
+        ${market.rank ? `<tr><th>Market cap rank</th><td>#${escapeHtml(String(market.rank))}</td></tr>` : ""}
+        ${market.priceUsd ? `<tr><th>Price</th><td>$${escapeHtml(market.priceUsd.toLocaleString(undefined, { maximumFractionDigits: 6 }))}</td></tr>` : ""}
+        ${market.marketCapUsd ? `<tr><th>Market cap</th><td>$${escapeHtml(market.marketCapUsd.toLocaleString())}</td></tr>` : ""}
+        ${market.volume24hUsd ? `<tr><th>24h volume</th><td>$${escapeHtml(market.volume24hUsd.toLocaleString())}</td></tr>` : ""}
+        ${market.tvlUsd ? `<tr><th>TVL</th><td>$${escapeHtml(market.tvlUsd.toLocaleString())}</td></tr>` : ""}
+        ${market.circulatingSupply ? `<tr><th>Circulating supply</th><td>${escapeHtml(market.circulatingSupply.toLocaleString())}</td></tr>` : ""}
+        ${market.categories && market.categories.length > 0 ? `<tr><th>Categories</th><td>${escapeHtml(market.categories.join(", "))}</td></tr>` : ""}
+      </table>`
+          : ""
+      }
+
+      <h3>Official links <span class="muted small">(Per tavily-search / coingecko)</span></h3>
+      <table class="table compact">
+        ${research.officialWebsite ? `<tr><th>Official website</th><td><a href="${escapeHtml(research.officialWebsite)}">${escapeHtml(new URL(research.officialWebsite).hostname)}</a></td></tr>` : ""}
+        ${research.officialTwitter ? `<tr><th>Twitter / X</th><td><a href="${escapeHtml(research.officialTwitter)}">${escapeHtml(research.officialTwitter)}</a></td></tr>` : ""}
+        ${research.githubRepo ? `<tr><th>GitHub</th><td><a href="${escapeHtml(research.githubRepo)}">${escapeHtml(research.githubRepo.replace("https://github.com/", ""))}</a></td></tr>` : ""}
+        ${research.whitepaperUrl ? `<tr><th>Whitepaper</th><td><a href="${escapeHtml(research.whitepaperUrl)}">${escapeHtml(research.whitepaperUrl)}</a></td></tr>` : ""}
+      </table>
+
+      ${
+        summary
+          ? `<h3>Project summary <span class="muted small">(Per tavily-search: AI-synthesized)</span></h3>
+      <div class="callout">${escapeHtml(summary.content)}</div>`
+          : ""
+      }
+
+      ${
+        news.length > 0
+          ? `<h3>Recent news <span class="muted small">(Per tavily-search: news topic)</span></h3>
+      <ol>
+        ${news
+          .map(
+            (n) => `<li><strong>${escapeHtml(n.title)}</strong>${n.date ? ` <span class="muted small">(${escapeHtml(n.date.split("T")[0])})</span>` : ""}
+          ${n.url ? `<br><a href="${escapeHtml(n.url)}">${escapeHtml(new URL(n.url).hostname)}</a>` : ""}
+          <br>${escapeHtml(n.content.slice(0, 250))}${n.content.length > 250 ? "…" : ""}</li>`,
+          )
+          .join("")}
+      </ol>`
+          : ""
+      }
+
+      ${
+        code.length > 0
+          ? `<h3>Code repository <span class="muted small">(Per github)</span></h3>
+      <table class="table compact">
+        ${code
+          .map(
+            (c) => `<tr><th>${escapeHtml(c.title.split(" — ")[0] ?? c.title)}</th><td>${escapeHtml(c.content)}</td></tr>`,
+          )
+          .join("")}
+      </table>`
+          : ""
+      }
+
+      ${
+        risks.length > 0
+          ? `<h3>Risk search results <span class="muted small">(Per tavily-search: scam/exploit/team queries)</span></h3>
+      <ul>
+        ${risks
+          .map(
+            (r) => `<li><strong>${escapeHtml(r.title)}</strong>${r.url ? ` <a href="${escapeHtml(r.url)}">${escapeHtml(new URL(r.url).hostname)}</a>` : ""}
+          <br><em>${escapeHtml(r.content.slice(0, 200))}</em></li>`,
+          )
+          .join("")}
+      </ul>`
+          : ""
+      }
+    </section>`;
 }
 
 function renderOnchainosDossier(dossier: ReportDossier | null | undefined): string {
@@ -375,6 +465,11 @@ function renderExecSummary(report: AuditReport, audit: ProjectAudit): string {
 
 function renderProjectProfile(report: AuditReport): string {
   const i = report.identity;
+  const r = report.research;
+  // Prefer research.officialWebsite over identity.website (more reliable)
+  const website = r?.officialWebsite ?? i.website;
+  const twitter = r?.officialTwitter ? r.officialTwitter.replace(/^https?:\/\/(twitter\.com|x\.com)\//, "@") : (i.twitter ? "@" + i.twitter : "");
+  const github = r?.githubRepo ?? i.github;
   return `
     <section>
       <h2>2. Project Profile</h2>
@@ -384,9 +479,13 @@ function renderProjectProfile(report: AuditReport): string {
           ${i.ticker ? `<tr><th>Ticker</th><td>${escapeHtml(i.ticker)}</td></tr>` : ""}
           ${i.contractAddress ? `<tr><th>Contract</th><td><code>${escapeHtml(i.contractAddress)}</code></td></tr>` : ""}
           ${i.chain ? `<tr><th>Chain</th><td>${escapeHtml(i.chain)}</td></tr>` : ""}
-          ${i.website ? `<tr><th>Website</th><td>${escapeHtml(i.website)}</td></tr>` : ""}
-          ${i.twitter ? `<tr><th>Twitter</th><td>@${escapeHtml(i.twitter)}</td></tr>` : ""}
-          ${i.github ? `<tr><th>GitHub</th><td>${escapeHtml(i.github)}</td></tr>` : ""}
+          ${website ? `<tr><th>Website</th><td><a href="${escapeHtml(website)}">${escapeHtml(website)}</a></td></tr>` : ""}
+          ${twitter ? `<tr><th>Twitter / X</th><td><a href="https://twitter.com/${escapeHtml(twitter.replace("@", ""))}">${escapeHtml(twitter)}</a></td></tr>` : ""}
+          ${github ? `<tr><th>GitHub</th><td><a href="${escapeHtml(github)}">${escapeHtml(github.replace("https://github.com/", ""))}</a></td></tr>` : ""}
+          ${r?.marketContext?.rank ? `<tr><th>Market cap rank</th><td>#${r.marketContext.rank}</td></tr>` : ""}
+          ${r?.marketContext?.marketCapUsd ? `<tr><th>Market cap</th><td>$${r.marketContext.marketCapUsd.toLocaleString()}</td></tr>` : ""}
+          ${r?.marketContext?.tvlUsd ? `<tr><th>TVL</th><td>$${r.marketContext.tvlUsd.toLocaleString()}</td></tr>` : ""}
+          ${r?.marketContext?.categories && r.marketContext.categories.length > 0 ? `<tr><th>Categories</th><td>${r.marketContext.categories.map(escapeHtml).join(", ")}</td></tr>` : ""}
           <tr><th>Input given</th><td><code>${escapeHtml(i.rawInput)}</code></td></tr>
           <tr><th>Identity confidence</th><td>${(i.confidence * 100).toFixed(0)}%</td></tr>
         </tbody>
@@ -394,30 +493,138 @@ function renderProjectProfile(report: AuditReport): string {
     </section>`;
 }
 
-function renderOnchainSection(audit: ProjectAudit): string {
+function renderOnchainSection(audit: ProjectAudit, report: AuditReport): string {
+  const i = report.identity;
+  const dossier = report.onchainDossier;
   return `
     <section>
       <h2>3. On-Chain Audit</h2>
-      <p>For every project-controlled wallet (deployer, treasury, fee collector, multisig), VEY1 audits the funding source, transaction history, and counterparty graph. ${audit.projectWallets.length === 0 ? "No project-controlled wallets were identified in this audit." : ""}</p>
+      <p>For every project-controlled wallet (deployer, treasury, fee collector, multisig), VEY1 audits the funding source, transaction history, and counterparty graph. ${audit.projectWallets.length === 0 ? "No project-controlled wallets were explicitly identified in the input. The audit focused on the project's deployed token contract (if any)." : ""}</p>
       ${renderWalletTable(audit.projectWallets)}
+      ${
+        dossier && dossier.resolvedToken
+          ? `<h3>Token contract analysis</h3>
+      <table class="table compact">
+        <tr><th>Symbol</th><td>${escapeHtml(dossier.resolvedToken.symbol ?? "")}</td></tr>
+        <tr><th>Name</th><td>${escapeHtml(dossier.resolvedToken.name ?? "")}</td></tr>
+        <tr><th>Contract</th><td><code>${escapeHtml(dossier.resolvedToken.address ?? "")}</code></td></tr>
+        <tr><th>Chain</th><td>${escapeHtml(dossier.resolvedToken.chain ?? "")}</td></tr>
+        ${dossier.resolvedToken.deployerAddress ? `<tr><th>Deployer</th><td><code>${escapeHtml(dossier.resolvedToken.deployerAddress)}</code></td></tr>` : ""}
+      </table>`
+          : ""
+      }
+      ${
+        dossier && dossier.security
+          ? `<h3>Contract security check <span class="muted small">(Per okx-security)</span></h3>
+      <table class="table compact">
+        <tr><th>Honeypot</th><td>${dossier.security.isHoneypot ? "<strong style='color:#dc2626'>YES (CRITICAL)</strong>" : "No (token is tradeable)"}</td></tr>
+        <tr><th>Can sell</th><td>${dossier.security.canSell ? "Yes" : "<strong style='color:#dc2626'>NO (CRITICAL)</strong>"}</td></tr>
+        <tr><th>Ownership renounced</th><td>${dossier.security.hasRenounced ? "Yes" : "No (admin key still active)"}</td></tr>
+        <tr><th>Mint function</th><td>${dossier.security.hasMintFunction ? "Present (can inflate supply)" : "Disabled"}</td></tr>
+        ${dossier.security.holderConcentration != null ? `<tr><th>Top-10 holder concentration</th><td>${dossier.security.holderConcentration.toFixed(1)}%</td></tr>` : ""}
+        ${dossier.security.suspiciousFlags.length > 0 ? `<tr><th>Suspicious flags</th><td>${dossier.security.suspiciousFlags.map((f) => `<span class="flag-yellow">${escapeHtml(f)}</span>`).join(" ")}</td></tr>` : ""}
+      </table>`
+          : ""
+      }
+      ${
+        dossier && dossier.deployerReputation
+          ? `<h3>Deployer reputation <span class="muted small">(Per okx-dex-trenches)</span></h3>
+      <table class="table compact">
+        <tr><th>Total tokens launched</th><td>${dossier.deployerReputation.totalTokensLaunched}</td></tr>
+        <tr><th>Tokens rugged</th><td>${dossier.deployerReputation.ruggedCount}</td></tr>
+        ${dossier.deployerReputation.avgTokenLifetimeDays != null ? `<tr><th>Average token lifetime</th><td>${dossier.deployerReputation.avgTokenLifetimeDays.toFixed(0)} days</td></tr>` : ""}
+        ${dossier.deployerReputation.otherTokens.length > 0 ? `<tr><th>Other tokens</th><td>${dossier.deployerReputation.otherTokens.map((t) => escapeHtml(t.symbol)).join(", ")}</td></tr>` : ""}
+      </table>`
+          : ""
+      }
+      ${
+        dossier && dossier.holders
+          ? `<h3>Holder analysis <span class="muted small">(Per okx-dex-trenches)</span></h3>
+      <table class="table compact">
+        <tr><th>Holder clusters detected</th><td>${dossier.holders.clusterCount}</td></tr>
+        ${dossier.holders.newWalletPercent != null ? `<tr><th>New wallet % (recent buyers)</th><td>${dossier.holders.newWalletPercent.toFixed(1)}%</td></tr>` : ""}
+        ${dossier.holders.rugPullPercent != null ? `<tr><th>Rug pull signal %</th><td>${dossier.holders.rugPullPercent.toFixed(1)}%</td></tr>` : ""}
+        ${dossier.holders.topHolders.length > 0 ? `<tr><th>Top holders</th><td>${dossier.holders.topHolders.slice(0, 5).map((h) => escapeHtml(h.address.slice(0, 8) + "...") + " (" + h.percent.toFixed(1) + "%)").join("<br>")}</td></tr>` : ""}
+      </table>`
+          : ""
+      }
     </section>`;
 }
 
-function renderTeamSection2(team: TeamMember[]): string {
+function renderTeamSection2(team: TeamMember[], research?: ReportResearch): string {
+  // If research has team members but audit.team doesn't, merge them for the display
   return `
     <section>
       <h2>4. Team Dossiers</h2>
       <p>For every identified team member, VEY1 audits: (a) identity verification status, (b) public social footprint, (c) past project associations, (d) personal on-chain wallets, (e) scam database cross-reference. The dossier below contains evidence and per-person risk scoring.</p>
       ${renderTeamSection(team)}
+      ${research ? renderResearchTeamMembers(research) : ""}
     </section>`;
 }
 
-function renderRiskSynthesis(audit: ProjectAudit): string {
+function renderResearchTeamMembers(research: ReportResearch): string {
+  // Extract team members from Tavily findings
+  const summary = research.findings.find((f) => f.category === "summary");
+  if (!summary) return "";
+  // Look for founder names in the summary content
+  const nameMatches = summary.content.match(/(?:founder|co-founder|founded by|by)\s+([A-Z][a-z]+ [A-Z][a-z]+)/gi);
+  if (!nameMatches || nameMatches.length === 0) return "";
+  const uniqueNames = Array.from(new Set(nameMatches.map((m) => m.replace(/^(?:founder|co-founder|founded by|by)\s+/i, ""))));
+  if (uniqueNames.length === 0) return "";
+  return `
+    <h3>Public team information (from web research)</h3>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Source</th><th>Evidence</th></tr></thead>
+      <tbody>
+        ${uniqueNames
+          .map(
+            (name) => `<tr>
+            <td>${escapeHtml(name)}</td>
+            <td>Per tavily-search</td>
+            <td><em>${escapeHtml(summary.content.slice(0, 400))}</em></td>
+          </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderRiskSynthesis(audit: ProjectAudit, report: AuditReport): string {
+  const r = report.research;
+  const news = r?.findings.filter((f) => f.category === "news").slice(0, 3) ?? [];
+  const risks = r?.findings.filter((f) => f.category === "risks").slice(0, 3) ?? [];
   return `
     <section>
       <h2>5. Risk Synthesis</h2>
       <p>${escapeHtml(audit.reasoning)}</p>
       ${audit.flags.length > 0 ? renderFlags(audit.flags) : ""}
+      ${
+        risks.length > 0
+          ? `<h3>Web research — risk evidence <span class="muted small">(Per tavily-search: scam/exploit queries)</span></h3>
+      <ul>
+        ${risks
+          .map(
+            (r) => `<li><strong>${escapeHtml(r.title)}</strong>${r.url ? ` <a href="${escapeHtml(r.url)}">${escapeHtml(new URL(r.url).hostname)}</a>` : ""}
+          <br><em>${escapeHtml(r.content.slice(0, 250))}</em></li>`,
+          )
+          .join("")}
+      </ul>`
+          : ""
+      }
+      ${
+        news.length > 0
+          ? `<h3>Recent developments <span class="muted small">(Per tavily-search: news topic)</span></h3>
+      <ol>
+        ${news
+          .map(
+            (n) => `<li><strong>${escapeHtml(n.title)}</strong>${n.date ? ` <span class="muted small">(${escapeHtml(n.date.split("T")[0])})</span>` : ""}
+          ${n.url ? `<br><a href="${escapeHtml(n.url)}">${escapeHtml(new URL(n.url).hostname)}</a>` : ""}
+          <br>${escapeHtml(n.content.slice(0, 250))}${n.content.length > 250 ? "…" : ""}</li>`,
+          )
+          .join("")}
+      </ol>`
+          : ""
+      }
     </section>`;
 }
 
@@ -595,10 +802,11 @@ export function reportToHtml(report: AuditReport): string {
   ${renderToc()}
   ${renderExecSummary(report, a)}
   ${renderProjectProfile(report)}
-  ${renderOnchainSection(a)}
+  ${report.research ? renderResearchSection(report.research as ReportResearch) : ""}
+  ${renderOnchainSection(a, report)}
   ${renderOnchainosDossier(report.onchainDossier)}
-  ${renderTeamSection2(a.team)}
-  ${renderRiskSynthesis(a)}
+  ${renderTeamSection2(a.team, report.research as ReportResearch | undefined)}
+  ${renderRiskSynthesis(a, report)}
   ${renderComparables(a)}
   ${renderRecommendation(a)}
   ${renderMethodology(report)}

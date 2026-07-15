@@ -286,6 +286,7 @@ export function buildReport(
   startedAt: Date,
   dataConfidence: number,
   dossier?: OnchainDossier | null,
+  research?: import("../services/research.js").ResearchReport | null,
 ): AuditReport {
   return {
     id: `TL-${startedAt.getUTCFullYear()}-${String(startedAt.getUTCMonth() + 1).padStart(2, "0")}-${String(startedAt.getUTCDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
@@ -294,6 +295,27 @@ export function buildReport(
     startedAt: startedAt.toISOString(),
     completedAt: new Date().toISOString(),
     evidence,
+    research: research
+      ? {
+          query: research.query,
+          resolvedProjectName: research.resolvedProjectName,
+          officialWebsite: research.officialWebsite,
+          officialTwitter: research.officialTwitter,
+          githubRepo: research.githubRepo,
+          whitepaperUrl: research.whitepaperUrl,
+          marketContext: research.marketContext,
+          findings: research.findings.map((f) => ({
+            source: f.source,
+            category: f.category,
+            title: f.title,
+            url: f.url,
+            content: f.content,
+            date: f.date,
+          })),
+          searchQueries: research.searchQueries,
+          totalCost: research.totalCost,
+        }
+      : undefined,
     dataConfidence,
     onchainDossier: dossier
       ? {

@@ -205,7 +205,7 @@ export async function runAudit(
 
   let report;
   try {
-    report = buildReport(identity, audit, evidence, new Date(t0), Math.min(1, dataConfidence), dossier);
+    report = buildReport(identity, audit, evidence, new Date(t0), Math.min(1, dataConfidence), dossier, research);
   } catch (e) {
     console.error(`[orchestrator] buildReport FAILED: ${e instanceof Error ? e.stack : String(e)}`);
     throw e;
