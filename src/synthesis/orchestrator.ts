@@ -143,11 +143,18 @@ export async function runAudit(
   });
 
   // Stage 5: synthesize via LLM — pass the dossier as EVIDENCE (not just LLM memory)
-  const synth = await synthesizeAudit(identity, projectWallets, teamResult.members, {
-    twitters,
-    githubs,
-    dossier: dossier ?? undefined,
-  });
+  let synth;
+  try {
+    synth = await synthesizeAudit(identity, projectWallets, teamResult.members, {
+      twitters,
+      githubs,
+      dossier: dossier ?? undefined,
+    });
+    console.log(`[orchestrator] synth OK: riskScore=${synth.riskScore}, recommendation=${synth.recommendation}`);
+  } catch (e) {
+    console.error(`[orchestrator] synth FAILED: ${e instanceof Error ? e.stack : String(e)}`);
+    throw e;
+  }
 
   // Stage 6: assemble ProjectAudit
   const allFlags: AuditFlag[] = [

@@ -85,6 +85,7 @@ export async function synthesizeAudit(
   enrichedTeam: TeamMember[];
 }> {
   const dossier = extraSignals.dossier as OnchainDossier | undefined;
+  console.log(`[synthesize] identity=${identity.canonicalName}, dossier=${dossier ? `resolvedToken=${dossier.resolvedToken?.symbol}` : "null"}`);
 
   // Build a compact evidence payload
   const payload = {
@@ -167,6 +168,7 @@ Return JSON with this exact shape:
     const text = await res.body.text();
     throw new Error(`LLM API error ${res.statusCode}: ${text.slice(0, 300)}`);
   }
+  console.log(`[synthesize] LLM responded successfully for ${identity.canonicalName}`);
 
   const json = (await res.body.json()) as {
     choices: { message: { content: string } }[];
