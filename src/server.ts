@@ -8,6 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { config } from "./config/secrets.js";
+import { existsSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentChallenge, isPaymentHeaderValid } from "./utils/x402.js";
@@ -126,11 +127,15 @@ async function main() {
       return;
     }
     const fullPath = resolve(config.outputDir, filename);
+    app.log.info(`Serving report: ${fullPath} (exists=${existsSync(fullPath)})`);
     reply.sendFile(fullPath);
   });
 
   await app.listen({ port: config.port, host: config.host });
   app.log.info(`VEY1 listening on http://${config.host}:${config.port}`);
+  app.log.info(`CWD: ${process.cwd()}`);
+  app.log.info(`outputDir resolved: ${resolve(config.outputDir)}`);
+  app.log.info(`publicBaseUrl: ${config.publicBaseUrl}`);
 }
 
 main().catch((e) => {
