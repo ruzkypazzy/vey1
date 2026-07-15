@@ -3,7 +3,8 @@
 //   1. resolve input → ProjectIdentity
 //   2. scrape project site → candidate team
 //   3. audit on-chain wallets (project + personal)
-//   4. synthesize via LLM
+//   3b. (NEW) gather real on-chain evidence via OKX OnchainOS
+//   4. synthesize via LLM (with source citations)
 //   5. build the ProjectAudit record
 
 import { resolveInput, enrichFromWeb } from "../audit/resolver.js";
@@ -11,6 +12,7 @@ import { scrapeProjectSite } from "../audit/scrape.js";
 import { auditWallet } from "../audit/onchain.js";
 import { buildTeam } from "../audit/team.js";
 import { synthesizeAudit, buildReport } from "./prompt.js";
+import { buildDossier, checkOnchainosAvailable, type OnchainDossier } from "../services/onchainos.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -23,13 +25,14 @@ import type {
 export interface OrchestratorInput {
   /** Project name, handle, contract, or URL */
   query: string;
-  /** Optional: explicit addresses to treat as personal wallets (e.g. user pastes "0xABC is the deployer") */
+  /** Optional: explicit addresses to treat as personal wallets */
   explicitAddresses?: { address: string; source: string; chain?: string }[];
 }
 
 export interface OrchestratorResult {
   report: AuditReport;
   durationMs: number;
+  onchainDossier?: OnchainDossier | null;
 }
 
 export async function runAudit(
@@ -81,7 +84,34 @@ export async function runAudit(
     }
   }
 
-  // Stage 4: build team
+  // Stage 3b (NEW): real on-chain dossier via OKX OnchainOS — this is the
+  // "no LLM hallucination" upgrade. Builds a structured dossier of:
+  //   - resolved token (contract + chain + deployer)
+  //   - security scan (honeypot, risk level, mint authority)
+  //   - holder cluster analysis (rug pull %, top 10 concentration)
+  //   - deployer reputation (other tokens, rugged count)
+  //   - smart money signals
+  //   - real social sentiment (KOLs, vibe score)
+  //   - recent news (cited URLs)
+  //   - deployer wallet PnL (win rate, realized PnL)
+  let dossier: OnchainDossier | null = null;
+  const onchainosHealth = await checkOnchainosAvailable();
+  if (onchainosHealth.ok && process.env.ONCHAINOS_DISABLED !== "1") {
+    try {
+      dossier = await buildDossier(input.query, identity.chain as any);
+      evidence.push({ type: "onchainos", ref: "dossier", note: `cost=${dossier.costUsdt0.toFixed(4)} USDT0` });
+    } catch (e) {
+      evidence.push({ type: "error", ref: "onchainos-dossier", note: String(e) });
+    }
+  } else {
+    evidence.push({
+      type: "info",
+      ref: "onchainos",
+      note: onchainosHealth.ok ? "disabled by env" : `unavailable: ${onchainosHealth.error}`,
+    });
+  }
+
+  // Stage 4: build team (now informed by the dossier's deployer + other tokens)
   const candidateNames = candidates.map((c) => c.name ?? "").filter(Boolean);
   const teamResult = await buildTeam({
     names: candidateNames,
@@ -90,10 +120,11 @@ export async function runAudit(
     explicitAddresses: input.explicitAddresses,
   });
 
-  // Stage 5: synthesize via LLM
+  // Stage 5: synthesize via LLM — pass the dossier as EVIDENCE (not just LLM memory)
   const synth = await synthesizeAudit(identity, projectWallets, teamResult.members, {
     twitters,
     githubs,
+    dossier: dossier ?? undefined,
   });
 
   // Stage 6: assemble ProjectAudit
@@ -118,9 +149,10 @@ export async function runAudit(
 
   const dataConfidence =
     Math.min(1, 0.3 + projectWallets.length * 0.1 + teamResult.members.length * 0.1) *
-    (identity.confidence || 0.5);
+    (identity.confidence || 0.5) *
+    (dossier?.resolvedToken ? 1.3 : 1.0); // boost confidence if we have real OnchainOS data
 
-  const report = buildReport(identity, audit, evidence, new Date(t0), dataConfidence);
+  const report = buildReport(identity, audit, evidence, new Date(t0), Math.min(1, dataConfidence), dossier);
 
-  return { report, durationMs: Date.now() - t0 };
+  return { report, durationMs: Date.now() - t0, onchainDossier: dossier };
 }

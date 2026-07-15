@@ -1,13 +1,16 @@
 // src/synthesis/prompt.ts
-// LLM synthesis — the secret sauce. Given a ProjectAudit, ask the LLM
-// to produce: a 0-100 risk score, red/yellow/green flags, comparable
-// projects, and a 1-paragraph recommendation.
+// LLM synthesis — the secret sauce. Given a ProjectAudit + real on-chain
+// dossier from OKX OnchainOS, ask the LLM to produce: a 0-100 risk score,
+// red/yellow/green flags, comparable projects, and a 1-paragraph
+// recommendation. The dossier is EVIDENCE — every claim in the final
+// report should cite it.
 //
 // We use gpt-4o-mini via the OpenAI-compatible API (FreeModel.dev by
 // default; swap OPENAI_BASE_URL to use OpenAI directly).
 
 import { request } from "undici";
 import { config } from "../config/secrets.js";
+import type { OnchainDossier } from "../services/onchainos.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -20,24 +23,42 @@ import type {
 
 const SYSTEM_PROMPT = `You are VEY1, a forensic crypto due-diligence analyst. You are precise, evidence-based, and adversarial toward unverified claims. You never invent facts; if you don't have evidence, you say so explicitly with a confidence downgrade.
 
-You receive a structured JSON payload with:
-- Project identity (name, contract, social links)
-- Audited on-chain wallets (deployer, treasury, team personal wallets)
-- Audited team members (with personal wallet audit results)
-- Past project references and scam database hits
+You receive a structured JSON payload that includes a "dossier" of REAL ON-CHAIN DATA pulled from OKX OnchainOS (paid x402 calls). The dossier contains:
+- resolvedToken: the token contract, chain, deployer address
+- security: honeypot check, riskLevel, mint function, suspicious flags
+- holders: top 10 holders, cluster count, new wallet %, rug pull %
+- deployerReputation: other tokens by the same deployer, rugged count
+- smartMoney: address tracker for smart money / KOL / whale activity
+- sentiment: real per-token vibe score and KOL leaderboard
+- recentNews: cited news articles with URLs
+- walletPnl: deployer wallet's win rate, realized PnL, total trades
 
-Your job: produce a strict JSON response matching the requested schema. No prose outside the JSON.
+CITATION RULES — CRITICAL:
+- Every material claim in the report must reference the source: "Per okx-dex-trenches: deployer has launched 3 prior tokens, 2 of which rugged", "Per okx-security: honeypot risk = low, mint function = disabled", "Per okx-dex-signal: 12 smart money wallets added this position in the last 7 days", "Per okx-dex-social: sentiment score = 72/100 (greedy), top KOLs: @alice, @bob".
+- If the dossier is null or empty, treat that as a data gap and say "OnchainOS data unavailable — relying on LLM knowledge + scraper". Downgrade the riskScore by 10 points for missing dossier.
+- Do NOT fabricate token addresses, deployer addresses, wallet PnL, or holder counts. Only use what's in the dossier.
+- For "comparableProjects" and historical context (e.g. "this is similar to BitConnect"), you may use your knowledge of crypto history, but distinguish clearly: "Historical context (LLM knowledge, not in dossier):" prefix.
 
-Rules:
-- riskScore: 0-100, where 100 is safest. Be conservative. New projects with anonymous teams start at 60.
-- recommendation: "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID"
-- reasoning: 3-6 sentences. Cite specific evidence (tx hash, address, person name). Distinguish facts from inferences.
-- comparableProjects: 3-5 similar projects with status. Use your knowledge of crypto history. If you don't know, return fewer.
-- flags: only material flags. Don't pad. RED = serious, YELLOW = monitor, GREEN = positive signal.
-- teamEnrichment: for each team member, return inferred role (if you can guess), and any past projects you recognize.
-- topRisks: the 3-5 most material risks, ordered by severity.
+Output: strict JSON only. No prose outside JSON. No markdown fences.
 
-Output ONLY the JSON. No markdown fences, no commentary.`;
+riskScore: 0-100, where 100 is safest. Be conservative.
+- Start at 50 (neutral).
+- Add +20 if dossier.security.riskLevel = "safe" and honeypot=false.
+- Add +15 if dossier.deployerReputation.ruggedCount = 0 AND totalTokensLaunched >= 1.
+- Add +10 if dossier.smartMoney has >= 3 smart_money buys in last 7d.
+- Subtract -40 if dossier.security.isHoneypot = true OR cannotSell = true.
+- Subtract -30 if dossier.deployerReputation.ruggedCount >= 2.
+- Subtract -20 if dossier.holders.top10Concentration > 80%.
+- Subtract -10 if dossier.sentiment.sentimentScore < 30 (extreme fear / exit).
+- Subtract -15 if dossier has no resolvedToken (data gap).
+
+recommendation: "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID"
+- PROCEED: riskScore >= 80
+- PROCEED_WITH_MONITORING: 60 <= riskScore < 80
+- CAUTION: 40 <= riskScore < 60
+- AVOID: riskScore < 40
+
+reasoning: 3-6 sentences. Cite dossier sources explicitly. Distinguish on-chain facts from inferences.`;
 
 interface LlmResponseShape {
   riskScore: number;
@@ -63,9 +84,12 @@ export async function synthesizeAudit(
   comparableProjects: PastProjectRef[];
   enrichedTeam: TeamMember[];
 }> {
-  // Build a compact evidence payload (don't blow the context window)
+  const dossier = extraSignals.dossier as OnchainDossier | undefined;
+
+  // Build a compact evidence payload
   const payload = {
     identity,
+    dossier: dossier ?? null, // ← real on-chain evidence, not LLM memory
     projectWallets: projectWallets.map((w) => ({
       address: w.address,
       label: w.label,
@@ -88,8 +112,14 @@ export async function synthesizeAudit(
       scamDbHits: t.scamDbHits,
       flags: t.flags,
     })),
-    extraSignals,
+    extraSignals: Object.fromEntries(
+      Object.entries(extraSignals).filter(([k]) => k !== "dossier"),
+    ),
   };
+
+  const dossierNote = dossier
+    ? `Real OnchainOS dossier attached (cost: ${dossier.costUsdt0.toFixed(4)} USDT0 from Agentic Wallet). CITE IT in your reasoning with explicit "Per okx-<skill>:" prefixes.`
+    : `⚠️ OnchainOS dossier is NULL or empty. Treat this as a DATA GAP — every claim is LLM-knowledge only, not real on-chain data. Downgrade riskScore by 10 points and note "OnchainOS data unavailable" in reasoning.`;
 
   const body = {
     model: config.openai.model,
@@ -101,10 +131,21 @@ export async function synthesizeAudit(
 
 Do NOT confuse this with any other project. All your analysis MUST be about "${identity.canonicalName}" specifically.
 
-Project data:
+${dossierNote}
+
+Project data (JSON):
 ${JSON.stringify(payload, null, 2)}
 
-Return JSON with this exact shape:\n{\n  "riskScore": <0-100>,\n  "recommendation": "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID",\n  "reasoning": "<3-6 sentence narrative about ${identity.canonicalName} citing specific evidence>",\n  "topRisks": ["<risk 1>", "<risk 2>", "<risk 3>"],\n  "flags": [{"color": "RED|YELLOW|GREEN", "category": "<str>", "message": "<str>", "evidence": "<optional>"}],\n  "comparableProjects": [{"name": "<str>", "role": "<str or 'n/a'>", "year": <number or null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}],\n  "teamEnrichment": [{"name": "<str>", "role": "<str>", "pastProjects": [{"name": "<str>", "role": "<str>", "year": <number|null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}]}]\n}`,
+Return JSON with this exact shape:
+{
+  "riskScore": <0-100>,
+  "recommendation": "PROCEED" | "PROCEED_WITH_MONITORING" | "CAUTION" | "AVOID",
+  "reasoning": "<3-6 sentence narrative about ${identity.canonicalName} with 'Per okx-<skill>:' citations to dossier data>",
+  "topRisks": ["<risk 1>", "<risk 2>", "<risk 3>"],
+  "flags": [{"color": "RED|YELLOW|GREEN", "category": "<str>", "message": "<str>", "evidence": "<okx-skill or url>"}],
+  "comparableProjects": [{"name": "<str>", "role": "<str or 'n/a'>", "year": <number or null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}],
+  "teamEnrichment": [{"name": "<str>", "role": "<str>", "pastProjects": [{"name": "<str>", "role": "<str>", "year": <number|null>, "status": "ACTIVE|RUGGED|ABANDONED|ACQUIRED|UNKNOWN", "outcome": "<str>"}]}]
+}`,
       },
     ],
     temperature: 0.2,
@@ -184,6 +225,7 @@ export function buildReport(
   evidence: { type: string; ref: string; note?: string }[],
   startedAt: Date,
   dataConfidence: number,
+  dossier?: OnchainDossier | null,
 ): AuditReport {
   return {
     id: `TL-${startedAt.getUTCFullYear()}-${String(startedAt.getUTCMonth() + 1).padStart(2, "0")}-${String(startedAt.getUTCDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
@@ -193,5 +235,75 @@ export function buildReport(
     completedAt: new Date().toISOString(),
     evidence,
     dataConfidence,
+    onchainDossier: dossier
+      ? {
+          query: dossier.query,
+          resolvedToken: dossier.resolvedToken
+            ? {
+                symbol: dossier.resolvedToken.symbol,
+                name: dossier.resolvedToken.name,
+                address: dossier.resolvedToken.address,
+                chain: String(dossier.resolvedToken.chain),
+                deployerAddress: dossier.resolvedToken.deployerAddress,
+              }
+            : undefined,
+          security: dossier.security
+            ? {
+                riskLevel: dossier.security.riskLevel,
+                riskScore: dossier.security.riskScore,
+                isHoneypot: dossier.security.isHoneypot,
+                canSell: dossier.security.canSell,
+                hasRenounced: dossier.security.hasRenounced,
+                hasMintFunction: dossier.security.hasMintFunction,
+                holderConcentration: dossier.security.holderConcentration,
+                suspiciousFlags: dossier.security.suspiciousFlags,
+              }
+            : undefined,
+          holders: dossier.holders
+            ? {
+                clusterCount: dossier.holders.clusterCount,
+                newWalletPercent: dossier.holders.newWalletPercent,
+                rugPullPercent: dossier.holders.rugPullPercent,
+                topHolders: dossier.holders.topHolders,
+              }
+            : undefined,
+          deployerReputation: dossier.deployerReputation
+            ? {
+                deployerAddress: dossier.deployerReputation.deployerAddress,
+                otherTokens: dossier.deployerReputation.otherTokens.map((t) => ({
+                  symbol: t.symbol,
+                  name: t.name,
+                  chain: String(t.chain),
+                })),
+                ruggedCount: dossier.deployerReputation.ruggedCount,
+                totalTokensLaunched: dossier.deployerReputation.totalTokensLaunched,
+                avgTokenLifetimeDays: dossier.deployerReputation.avgTokenLifetimeDays,
+              }
+            : undefined,
+          smartMoney: dossier.smartMoney?.map((s) => ({
+            address: s.address,
+            tag: s.tag,
+            recentBuysUsd: s.recentBuysUsd,
+            recentSellsUsd: s.recentSellsUsd,
+          })),
+          sentiment: dossier.sentiment
+            ? {
+                sentimentScore: dossier.sentiment.sentimentScore,
+                newsCount24h: dossier.sentiment.newsCount24h,
+                vibeRank: dossier.sentiment.vibeRank,
+                topKOLs: dossier.sentiment.topKOLs,
+              }
+            : undefined,
+          recentNews: dossier.recentNews?.map((n) => ({
+            title: n.title,
+            url: n.url,
+            source: n.source,
+            publishedAt: n.publishedAt,
+          })),
+          walletPnl: dossier.walletPnl ?? undefined,
+          errors: dossier.errors,
+          costUsdt0: dossier.costUsdt0,
+        }
+      : undefined,
   };
 }

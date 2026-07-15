@@ -140,4 +140,44 @@ export interface AuditReport {
   evidence: { type: string; ref: string; note?: string }[];
   /** Confidence in the audit's completeness (0-1) */
   dataConfidence: number;
+  /** Real on-chain evidence from OKX OnchainOS (if available) */
+  onchainDossier?: {
+    query: string;
+    resolvedToken?: {
+      symbol: string;
+      name: string;
+      address: string;
+      chain: string;
+      deployerAddress?: string;
+    };
+    security?: {
+      riskLevel: string;
+      riskScore: number;
+      isHoneypot: boolean;
+      canSell: boolean;
+      hasRenounced: boolean;
+      hasMintFunction: boolean;
+      holderConcentration?: number;
+      suspiciousFlags: string[];
+    };
+    holders?: {
+      clusterCount: number;
+      newWalletPercent: number;
+      rugPullPercent: number;
+      topHolders: { address: string; percent: number; tag?: string }[];
+    };
+    deployerReputation?: {
+      deployerAddress: string;
+      otherTokens: { symbol: string; name: string; chain: string }[];
+      ruggedCount: number;
+      totalTokensLaunched: number;
+      avgTokenLifetimeDays?: number;
+    };
+    smartMoney?: { address: string; tag: string; recentBuysUsd?: number; recentSellsUsd?: number }[];
+    sentiment?: { sentimentScore: number; newsCount24h?: number; vibeRank?: number; topKOLs?: { handle: string; influence: number }[] };
+    recentNews?: { title: string; url: string; source: string; publishedAt?: number }[];
+    walletPnl?: { realizedPnlUsd: number; unrealizedPnlUsd: number; winRate: number; totalTrades: number };
+    errors: string[];
+    costUsdt0: number;
+  };
 }

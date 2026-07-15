@@ -4,6 +4,157 @@
 
 import type { AuditReport, ProjectAudit, TeamMember, WalletAudit, RiskLevel, FlagColor } from "../types/index.js";
 
+// Subset of the OnchainDossier that we actually render in the PDF.
+// Matches the structure stored in `AuditReport.onchainDossier` (see types/index.ts).
+type ReportDossier = NonNullable<AuditReport["onchainDossier"]>;
+
+// Helper to format percentage with safety
+function pct(n: number | undefined | null): string {
+  if (n == null || isNaN(n)) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
+// Helper to format USD value
+function usd(n: number | undefined | null): string {
+  if (n == null || isNaN(n)) return "—";
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+function renderOnchainosDossier(dossier: ReportDossier | null | undefined): string {
+  if (!dossier) {
+    return `
+    <section>
+      <h2>3.5 OnchainOS Real-Time Evidence</h2>
+      <p class="muted">OnchainOS dossier unavailable for this audit. The risk score above is based on LLM knowledge and web scraping only — treat as provisional. Re-run with a funded Agentic Wallet to unlock real on-chain evidence.</p>
+    </section>`;
+  }
+  if (!dossier.resolvedToken) {
+    return `
+    <section>
+      <h2>3.5 OnchainOS Real-Time Evidence</h2>
+      <p class="muted">OnchainOS could not resolve a token matching "${escapeHtml(dossier.query)}" across its 20+ supported chains. The audit relies on LLM knowledge + web scraping for this project. Cost of search: ${dossier.costUsdt0.toFixed(4)} USDT0.</p>
+    </section>`;
+  }
+
+  const t = dossier.resolvedToken;
+  const sec = dossier.security;
+  const h = dossier.holders;
+  const dev = dossier.deployerReputation;
+  const sm = dossier.smartMoney;
+  const sent = dossier.sentiment;
+  const news = dossier.recentNews ?? [];
+  const pnl = dossier.walletPnl;
+
+  // Security panel
+  const secPanel = sec ? `
+    <h3>Security scan <span class="muted small">(okx-security)</span></h3>
+    <table class="table compact">
+      <tr><th>Risk level</th><td><strong style="color:${sec.riskLevel === "safe" || sec.riskLevel === "low" ? "#059669" : sec.riskLevel === "medium" ? "#d97706" : "#dc2626"}">${sec.riskLevel.toUpperCase()}</strong> (score ${sec.riskScore}/100)</td></tr>
+      <tr><th>Honeypot?</th><td>${sec.isHoneypot ? "<strong style=\"color:#dc2626\">YES</strong>" : "No"}</td></tr>
+      <tr><th>Can sell?</th><td>${sec.canSell ? "Yes" : "<strong style=\"color:#dc2626\">NO</strong>"}</td></tr>
+      <tr><th>Ownership renounced</th><td>${sec.hasRenounced ? "Yes" : "No"}</td></tr>
+      <tr><th>Mint function</th><td>${sec.hasMintFunction ? "<strong style=\"color:#d97706\">Present (can inflate supply)</strong>" : "Disabled"}</td></tr>
+      ${sec.holderConcentration != null ? `<tr><th>Top-10 concentration</th><td>${pct(sec.holderConcentration)}</td></tr>` : ""}
+      ${sec.suspiciousFlags.length > 0 ? `<tr><th>Suspicious flags</th><td>${sec.suspiciousFlags.map((f) => `<span class="mini-flag" style="background:#dc2626">!</span> ${escapeHtml(f)}`).join("; ")}</td></tr>` : ""}
+    </table>` : `<h3>Security scan <span class="muted small">(okx-security)</span></h3><p class="muted">Security scan unavailable (x402 call failed — see evidence log).</p>`;
+
+  // Holders panel
+  const hPanel = h ? `
+    <h3>Holder cluster analysis <span class="muted small">(okx-dex-token)</span></h3>
+    <table class="table compact">
+      <tr><th>Cluster count</th><td>${h.clusterCount} ${h.clusterCount <= 1 ? "(suspicious — single cluster often indicates sybil)" : ""}</td></tr>
+      <tr><th>New wallet %</th><td>${pct(h.newWalletPercent)}</td></tr>
+      <tr><th>Rug pull probability</th><td><strong style="color:${h.rugPullPercent > 30 ? "#dc2626" : h.rugPullPercent > 10 ? "#d97706" : "#059669"}">${pct(h.rugPullPercent)}</strong></td></tr>
+    </table>
+    ${h.topHolders.length > 0 ? `
+      <h4>Top holders</h4>
+      <table class="table compact">
+        <thead><tr><th>Address</th><th>% held</th><th>Tag</th></tr></thead>
+        <tbody>
+          ${h.topHolders.slice(0, 8).map((hh) => `<tr><td><code>${shortAddr(hh.address)}</code></td><td>${pct(hh.percent)}</td><td>${hh.tag ? escapeHtml(hh.tag) : "—"}</td></tr>`).join("")}
+        </tbody>
+      </table>` : ""}` : `<h3>Holder cluster analysis</h3><p class="muted">Holder data unavailable.</p>`;
+
+  // Deployer panel
+  const devPanel = dev ? `
+    <h3>Deployer reputation <span class="muted small">(okx-dex-trenches)</span></h3>
+    <table class="table compact">
+      <tr><th>Deployer</th><td><code>${shortAddr(dev.deployerAddress)}</code></td></tr>
+      <tr><th>Other tokens launched</th><td>${dev.totalTokensLaunched}</td></tr>
+      <tr><th>Of which rugged</th><td><strong style="color:${dev.ruggedCount >= 2 ? "#dc2626" : dev.ruggedCount === 1 ? "#d97706" : "#059669"}">${dev.ruggedCount}</strong></td></tr>
+      ${dev.avgTokenLifetimeDays != null ? `<tr><th>Avg token lifetime</th><td>${dev.avgTokenLifetimeDays.toFixed(0)} days</td></tr>` : ""}
+    </table>
+    ${dev.otherTokens.length > 0 ? `
+      <h4>Deployer's other tokens</h4>
+      <table class="table compact">
+        <thead><tr><th>Symbol</th><th>Name</th><th>Chain</th></tr></thead>
+        <tbody>
+          ${dev.otherTokens.slice(0, 10).map((ot) => `<tr><td>${escapeHtml(ot.symbol)}</td><td>${escapeHtml(ot.name)}</td><td>${escapeHtml(ot.chain)}</td></tr>`).join("")}
+        </tbody>
+      </table>` : ""}` : `<h3>Deployer reputation</h3><p class="muted">Deployer data unavailable or address not found.</p>`;
+
+  // Smart money panel
+  const smPanel = sm && sm.length > 0 ? `
+    <h3>Smart money / KOL signal <span class="muted small">(okx-dex-signal)</span></h3>
+    <table class="table compact">
+      <thead><tr><th>Address</th><th>Tag</th><th>Recent buys (USD)</th><th>Recent sells (USD)</th></tr></thead>
+      <tbody>
+        ${sm.slice(0, 10).map((s) => `<tr><td><code>${shortAddr(s.address)}</code></td><td>${escapeHtml(s.tag)}</td><td>${usd(s.recentBuysUsd)}</td><td>${usd(s.recentSellsUsd)}</td></tr>`).join("")}
+      </tbody>
+    </table>` : `<h3>Smart money signal</h3><p class="muted">No smart money / KOL activity in the past 7 days.</p>`;
+
+  // Sentiment panel
+  const sentPanel = sent ? `
+    <h3>Social sentiment <span class="muted small">(okx-dex-social)</span></h3>
+    <table class="table compact">
+      <tr><th>Vibe score</th><td><strong>${sent.sentimentScore}/100</strong> ${sent.sentimentScore < 30 ? "(extreme fear)" : sent.sentimentScore < 50 ? "(bearish)" : sent.sentimentScore < 70 ? "(neutral)" : "(greedy)"}</td></tr>
+      ${sent.vibeRank != null ? `<tr><th>Vibe rank</th><td>#${sent.vibeRank}</td></tr>` : ""}
+      ${sent.newsCount24h != null ? `<tr><th>News in 24h</th><td>${sent.newsCount24h}</td></tr>` : ""}
+      ${sent.topKOLs && sent.topKOLs.length > 0 ? `<tr><th>Top KOLs</th><td>${sent.topKOLs.slice(0, 5).map((k) => `@${escapeHtml(k.handle)} (influence: ${k.influence})`).join(", ")}</td></tr>` : ""}
+    </table>` : "";
+
+  // News panel
+  const newsPanel = news.length > 0 ? `
+    <h3>Recent news <span class="muted small">(okx-dex-social, cited)</span></h3>
+    <ol class="news-list">
+      ${news.slice(0, 8).map((n) => `<li><strong>${escapeHtml(n.title)}</strong> — <a href="${escapeHtml(n.url)}">${escapeHtml(n.source)}</a> <span class="muted">${n.publishedAt ? new Date(n.publishedAt).toISOString().slice(0, 10) : ""}</span></li>`).join("")}
+    </ol>` : "";
+
+  // Wallet PnL panel
+  const pnlPanel = pnl ? `
+    <h3>Deployer wallet trading history <span class="muted small">(okx-dex-market)</span></h3>
+    <table class="table compact">
+      <tr><th>Total trades</th><td>${pnl.totalTrades}</td></tr>
+      <tr><th>Win rate</th><td>${pct(pnl.winRate)}</td></tr>
+      <tr><th>Realized PnL</th><td><strong style="color:${pnl.realizedPnlUsd >= 0 ? "#059669" : "#dc2626"}">${usd(pnl.realizedPnlUsd)}</strong></td></tr>
+      <tr><th>Unrealized PnL</th><td><strong style="color:${pnl.unrealizedPnlUsd >= 0 ? "#059669" : "#dc2626"}">${usd(pnl.unrealizedPnlUsd)}</strong></td></tr>
+    </table>` : "";
+
+  return `
+    <section>
+      <h2>3.5 OnchainOS Real-Time Evidence</h2>
+      <p class="muted small">All data in this section is REAL ON-CHAIN EVIDENCE pulled from OKX OnchainOS via x402 paywall. The audit cost <strong>${dossier.costUsdt0.toFixed(4)} USDT0</strong> from VEY1's Agentic Wallet. Sources cited inline: <code>okx-dex-token</code>, <code>okx-dex-trenches</code>, <code>okx-dex-signal</code>, <code>okx-dex-social</code>, <code>okx-dex-market</code>, <code>okx-security</code>.</p>
+      <h3>Resolved token</h3>
+      <table class="table compact">
+        <tr><th>Symbol</th><td><strong>${escapeHtml(t.symbol)}</strong></td></tr>
+        <tr><th>Name</th><td>${escapeHtml(t.name)}</td></tr>
+        <tr><th>Contract</th><td><code>${shortAddr(t.address)}</code></td></tr>
+        <tr><th>Chain</th><td>${escapeHtml(t.chain)}</td></tr>
+        <tr><th>Deployer</th><td>${t.deployerAddress ? `<code>${shortAddr(t.deployerAddress)}</code>` : "—"}</td></tr>
+      </table>
+      ${secPanel}
+      ${hPanel}
+      ${devPanel}
+      ${smPanel}
+      ${sentPanel}
+      ${pnlPanel}
+      ${newsPanel}
+      ${dossier.errors.length > 0 ? `<p class="muted small">OnchainOS call errors: ${dossier.errors.map((e) => escapeHtml(e)).join("; ")}</p>` : ""}
+    </section>`;
+}
+
 const COLORS: Record<FlagColor, string> = {
   RED: "#dc2626",
   YELLOW: "#d97706",
@@ -445,6 +596,7 @@ export function reportToHtml(report: AuditReport): string {
   ${renderExecSummary(report, a)}
   ${renderProjectProfile(report)}
   ${renderOnchainSection(a)}
+  ${renderOnchainosDossier(report.onchainDossier)}
   ${renderTeamSection2(a.team)}
   ${renderRiskSynthesis(a)}
   ${renderComparables(a)}
