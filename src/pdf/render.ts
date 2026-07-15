@@ -19,7 +19,13 @@ export async function renderReportPdf(
   report: AuditReport,
   outDir: string = config.outputDir,
 ): Promise<RenderResult> {
-  const html = reportToHtml(report);
+  let html: string;
+  try {
+    html = reportToHtml(report);
+  } catch (e) {
+    console.error(`[renderReportPdf] reportToHtml FAILED for ${report.id}: ${e instanceof Error ? e.stack : String(e)}`);
+    throw e;
+  }
   const htmlPath = resolve(outDir, `${report.id}.html`);
   const pdfPath = resolve(outDir, `${report.id}.pdf`);
 
