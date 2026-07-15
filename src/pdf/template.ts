@@ -112,7 +112,7 @@ function renderOnchainosDossier(dossier: ReportDossier | null | undefined): stri
       <tr><th>Vibe score</th><td><strong>${sent.sentimentScore}/100</strong> ${sent.sentimentScore < 30 ? "(extreme fear)" : sent.sentimentScore < 50 ? "(bearish)" : sent.sentimentScore < 70 ? "(neutral)" : "(greedy)"}</td></tr>
       ${sent.vibeRank != null ? `<tr><th>Vibe rank</th><td>#${sent.vibeRank}</td></tr>` : ""}
       ${sent.newsCount24h != null ? `<tr><th>News in 24h</th><td>${sent.newsCount24h}</td></tr>` : ""}
-      ${sent.topKOLs && sent.topKOLs.length > 0 ? `<tr><th>Top KOLs</th><td>${sent.topKOLs.slice(0, 5).map((k) => `@${escapeHtml(String(k.handle ?? k.twitterHandle ?? "anonymous"))} (influence: ${k.influence ?? "n/a"})`).join(", ")}</td></tr>` : ""}
+      ${sent.topKOLs && sent.topKOLs.length > 0 ? `<tr><th>Top KOLs</th><td>${sent.topKOLs.slice(0, 5).map((k) => `@${escapeHtml(String((k as any).handle ?? (k as any).twitterHandle ?? "anonymous"))} (influence: ${(k as any).influence ?? "n/a"})`).join(", ")}</td></tr>` : ""}
     </table>` : "";
 
   // News panel
