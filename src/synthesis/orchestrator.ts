@@ -96,10 +96,12 @@ export async function runAudit(
   //   - deployer wallet PnL (win rate, realized PnL)
   let dossier: OnchainDossier | null = null;
   const onchainosHealth = await checkOnchainosAvailable();
+  console.log(`[orchestrator] onchainosHealth=${JSON.stringify(onchainosHealth)}`);
   if (onchainosHealth.ok && process.env.ONCHAINOS_DISABLED !== "1") {
     // Pre-flight: try to bootstrap the session and check the balance.
     // Skip the dossier entirely if we can't pay for it.
     const preflight = await canMakePaidCalls();
+    console.log(`[orchestrator] preflight=${JSON.stringify(preflight)}`);
     if (preflight.ok) {
       evidence.push({
         type: "onchainos",
@@ -108,11 +110,14 @@ export async function runAudit(
       });
       try {
         dossier = await buildDossier(input.query, identity.chain as any);
+        console.log(`[orchestrator] dossier built: resolvedToken=${dossier.resolvedToken?.symbol}, errors=${dossier.errors.length}, cost=${dossier.costUsdt0}`);
         evidence.push({ type: "onchainos", ref: "dossier", note: `cost=${dossier.costUsdt0.toFixed(4)} USDT0` });
       } catch (e) {
+        console.error(`[orchestrator] buildDossier failed: ${e instanceof Error ? e.message : String(e)}`);
         evidence.push({ type: "error", ref: "onchainos-dossier", note: String(e) });
       }
     } else {
+      console.warn(`[orchestrator] preflight skipped: ${preflight.reason}`);
       evidence.push({
         type: "info",
         ref: "onchainos",
@@ -120,6 +125,7 @@ export async function runAudit(
       });
     }
   } else {
+    console.warn(`[orchestrator] onchainos not available: ${onchainosHealth.error ?? "see logs"}`);
     evidence.push({
       type: "info",
       ref: "onchainos",
