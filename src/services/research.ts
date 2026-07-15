@@ -74,7 +74,7 @@ interface TavilyResponse {
 async function tavilySearch(
   query: string,
   options: { maxResults?: number; topic?: "general" | "news" | "finance" } = {},
-): Promise<TavilyResult[]> {
+): Promise<{ results: TavilyResult[]; answer?: string }> {
   if (!TAVILY_KEY) {
     throw new Error("TAVILY_API_KEY not set");
   }
@@ -97,7 +97,7 @@ async function tavilySearch(
     throw new Error(`Tavily ${r.status}: ${text.slice(0, 200)}`);
   }
   const data = (await r.json()) as TavilyResponse;
-  return data.results ?? [];
+  return { results: data.results ?? [], answer: data.answer };
 }
 
 // ─── 2. GitHub repo discovery ─────────────────────────────────────────────
@@ -239,20 +239,71 @@ export async function researchProject(
   if (TAVILY_KEY) {
     options.onProgress?.("identifying", "Tavily: project identification");
     try {
-      const identQueries = [
-        `${query} cryptocurrency protocol official website`,
-        `${query} crypto project team founders`,
-        `${query} whitepaper audit report`,
-        `${query} token contract address blockchain`,
-        `${query} crypto scam OR hack OR exploit 2024 OR 2025 OR 2026`,
+      // Get an overall summary first (Tavily's AI-synthesized answer)
+      const identQ = `${query} cryptocurrency project overview founders team history`;
+      searchQueries.push(identQ);
+      try {
+        const { results, answer } = await tavilySearch(identQ, { maxResults: 5 });
+        totalCost += 1;
+        if (answer) {
+          findings.push({
+            source: "tavily-search",
+            category: "summary",
+            title: `Project overview: ${query}`,
+            content: answer,
+            score: 1.0,
+          });
+        }
+        for (const r of results) {
+          const finding: ResearchFinding = {
+            source: "tavily-search",
+            category: "general",
+            title: r.title,
+            url: r.url,
+            content: r.content,
+            date: r.published_date,
+            score: r.score,
+          };
+          if (!resolvedProjectName && r.title.includes(query)) {
+            resolvedProjectName = query;
+          }
+          if (!officialWebsite) {
+            const url = new URL(r.url);
+            const host = url.hostname.replace(/^www\./, "");
+            const knownNonOfficial = [
+              "twitter.com", "x.com", "reddit.com", "github.com",
+              "youtube.com", "medium.com", "t.me", "discord.gg",
+              "coingecko.com", "coinmarketcap.com", "cryptorank.io",
+              "messari.io", "defillama.com", "decrypt.co",
+              "theblock.co", "cointelegraph.com", "coindesk.com",
+              "binance.com", "coinbase.com", "okx.com", "kucoin.com",
+              "reuters.com", "bloomberg.com", "cnbc.com", "forbes.com",
+              "facebook.com", "linkedin.com", "instagram.com",
+              "iq.wiki", "grokipedia.com", "datawallet.com", "wikipedia.org",
+            ];
+            if (!knownNonOfficial.some((d) => host.includes(d))) {
+              officialWebsite = r.url;
+            }
+          }
+          findings.push(finding);
+        }
+      } catch (e) {
+        // continue
+      }
+
+      // Then specific queries for facts
+      const factQueries = [
+        `${query} crypto founder CEO team`,
+        `${query} cryptocurrency launch date history`,
+        `${query} crypto audit firms report`,
       ];
-      for (const identQ of identQueries) {
+      for (const identQ of factQueries) {
         searchQueries.push(identQ);
         try {
-          const results = await tavilySearch(identQ, { maxResults: 5 });
+          const { results } = await tavilySearch(identQ, { maxResults: 4 });
           totalCost += 1;
           for (const r of results) {
-            const finding: ResearchFinding = {
+            findings.push({
               source: "tavily-search",
               category: "general",
               title: r.title,
@@ -260,34 +311,10 @@ export async function researchProject(
               content: r.content,
               date: r.published_date,
               score: r.score,
-            };
-            // Try to extract canonical name from first result
-            if (!resolvedProjectName && r.title.includes(query)) {
-              // Use the project name from the title if query is a substring
-              resolvedProjectName = query;
-            }
-            // Detect official website from URL patterns
-            if (!officialWebsite) {
-              const url = new URL(r.url);
-              const host = url.hostname.replace(/^www\./, "");
-              const knownNonOfficial = [
-                "twitter.com", "x.com", "reddit.com", "github.com",
-                "youtube.com", "medium.com", "t.me", "discord.gg",
-                "coingecko.com", "coinmarketcap.com", "cryptorank.io",
-                "messari.io", "defillama.com", "decrypt.co",
-                "theblock.co", "cointelegraph.com", "coindesk.com",
-                "binance.com", "coinbase.com", "okx.com", "kucoin.com",
-                "reuters.com", "bloomberg.com", "cnbc.com", "forbes.com",
-                "facebook.com", "linkedin.com", "instagram.com",
-              ];
-              if (!knownNonOfficial.some((d) => host.includes(d))) {
-                officialWebsite = r.url;
-              }
-            }
-            findings.push(finding);
+            });
           }
         } catch (e) {
-          // Continue with next query even if one fails
+          // continue
         }
       }
     } catch (e) {
@@ -310,7 +337,7 @@ export async function researchProject(
       ];
       for (const q of newsQueries) {
         searchQueries.push(q);
-        const results = await tavilySearch(q, { maxResults: 6, topic: "news" });
+        const { results } = await tavilySearch(q, { maxResults: 6, topic: "news" });
         totalCost += 1;
         for (const r of results) {
           findings.push({
@@ -340,7 +367,7 @@ export async function researchProject(
       ];
       for (const q of riskQueries) {
         searchQueries.push(q);
-        const results = await tavilySearch(q, { maxResults: 5 });
+        const { results } = await tavilySearch(q, { maxResults: 5 });
         totalCost += 1;
         for (const r of results) {
           findings.push({
