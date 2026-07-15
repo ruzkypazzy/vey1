@@ -177,11 +177,19 @@ export async function runAudit(
   };
 
   const dataConfidence =
-    Math.min(1, 0.3 + projectWallets.length * 0.1 + teamResult.members.length * 0.1) *
+    Math.min(1, 0.3 + (projectWallets?.length ?? 0) * 0.1 + (teamResult.members?.length ?? 0) * 0.1) *
     (identity.confidence || 0.5) *
     (dossier?.resolvedToken ? 1.3 : 1.0); // boost confidence if we have real OnchainOS data
 
-  const report = buildReport(identity, audit, evidence, new Date(t0), Math.min(1, dataConfidence), dossier);
+  console.log(`[orchestrator] calling buildReport: dataConfidence=${Math.min(1, dataConfidence)}, evidence.length=${evidence.length}`);
+  let report;
+  try {
+    report = buildReport(identity, audit, evidence, new Date(t0), Math.min(1, dataConfidence), dossier);
+    console.log(`[orchestrator] buildReport OK: id=${report.id}`);
+  } catch (e) {
+    console.error(`[orchestrator] buildReport FAILED: ${e instanceof Error ? e.stack : String(e)}`);
+    throw e;
+  }
 
   return { report, durationMs: Date.now() - t0, onchainDossier: dossier };
 }
