@@ -247,7 +247,7 @@ export async function getAdvancedInfo(address: string, chain: Chain): Promise<{
 
 export async function getDeployerReputation(deployerAddress: string, chain: Chain): Promise<DevReputation> {
   return paidCall<DevReputation>(
-    ["memepump", "dev-reputation", "--address", deployerAddress, "--chain", chain],
+    ["memepump", "token-dev-info", "--address", deployerAddress, "--chain", chain],
     {
       deployerAddress,
       otherTokens: [],
@@ -261,7 +261,7 @@ export async function getDeployerReputation(deployerAddress: string, chain: Chai
 
 export async function getTokensByDeployer(deployerAddress: string, chain: Chain): Promise<TokenInfo[]> {
   return paidCall<TokenInfo[]>(
-    ["memepump", "dev-tokens", "--address", deployerAddress, "--chain", chain],
+    ["memepump", "similar-tokens", "--address", deployerAddress, "--chain", chain],
     [],
     "dev-tokens",
   );
@@ -271,7 +271,7 @@ export async function getTokensByDeployer(deployerAddress: string, chain: Chain)
 
 export async function getSmartMoneySignals(tokenAddress: string, chain: Chain): Promise<SmartMoneySignal[]> {
   return paidCall<SmartMoneySignal[]>(
-    ["signal", "address-tracker", "--address", tokenAddress, "--chain", chain],
+    ["signal", "list", "--chain", chain],
     [],
     "signal",
   );
@@ -279,7 +279,7 @@ export async function getSmartMoneySignals(tokenAddress: string, chain: Chain): 
 
 export async function getTokenSentiment(symbol: string): Promise<SentimentSignal> {
   return paidCall<SentimentSignal>(
-    ["social", "token-vibe", "--symbol", symbol],
+    ["social", "vibe-timeline", "--symbol", symbol],
     {
       symbol,
       sentimentScore: 50,
@@ -291,7 +291,7 @@ export async function getTokenSentiment(symbol: string): Promise<SentimentSignal
 
 export async function getTokenNews(symbol: string, limit = 10): Promise<SentimentSignal["topNews"]> {
   return paidCall<SentimentSignal["topNews"]>(
-    ["social", "news", "--symbol", symbol, "--limit", String(limit)],
+    ["social", "news-by-symbol", "--symbol", symbol, "--limit", String(limit)],
     [],
     "news",
   );
