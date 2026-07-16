@@ -392,7 +392,7 @@
           report covering the team, every wallet, and the on-chain history that actually matters.
         </p>
         <div class="hero-actions">
-          <a href="#demo" class="btn btn-primary">Audit any project →</a>
+          <a href="/paid-audit" class="btn btn-primary">Audit any project →</a>
           <a href="#how" class="btn btn-ghost">How it works</a>
         </div>
         <div class="meta">
@@ -404,6 +404,10 @@
 
       <!-- Live demo card -->
       <div class="demo-card" id="demo">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Free demo</span>
+          <a href="/paid-audit" style="color: var(--amber); text-decoration: none; font-size: 13px;">Paid audit with PDF →</a>
+        </div>
         <div class="demo-tabs">
           <div class="demo-tab active" data-target="uniswap">Uniswap</div>
           <div class="demo-tab" data-target="hyperliquid">Hyperliquid</div>
@@ -588,11 +592,11 @@
         INPUT.value = '';
         INPUT.placeholder = 'Type any project name, @handle, contract, or URL';
         INPUT.focus();
-        HINT.textContent = 'Audit any project — free demo · runs in ~5s';
+        HINT.innerHTML = 'Free live audit · runs in ~5s. For a paid audit with full PDF, <a href="/paid-audit" style="color: var(--amber); text-decoration: underline;">click here</a>.';
       } else {
         INPUT.value = TARGETS[tab.dataset.target];
         INPUT.placeholder = 'Project name, @handle, contract, or URL';
-        HINT.textContent = 'Free live audit · runs a real LLM-powered audit on any project';
+        HINT.innerHTML = 'Free live audit · runs a real LLM-powered audit. For full PDF, <a href="/paid-audit" style="color: var(--amber); text-decoration: underline;">use the paid version</a>.';
       }
     });
   });
