@@ -1,8 +1,16 @@
 // src/utils/x402.ts
 // x402 v2 payment-required response builder using the OFFICIAL OKX Payment
-// SDK (@okxweb3/x402-express). Returns a 402 challenge in the standard
-// x402 v2 shape, with the required `PAYMENT-REQUIRED` header so the OKX
-// validator can confirm compliance.
+// SDK (@okxweb3/x402-express + @okxweb3/x402-core + @okxweb3/x402-evm).
+//
+// IMPORTANT: The 402 challenge shape MUST match the OKX schema exactly:
+//   {
+//     x402Version: 2,
+//     error: "Payment required" | undefined,
+//     resource: { url, description, mimeType },
+//     accepts: [  // ARRAY, not single object
+//       { scheme, network, amount (not maxAmountRequired!), asset, payTo, maxTimeoutSeconds, extra }
+//     ]
+//   }
 //
 // Reference: https://web3.okx.com/onchainos/dev-docs/payments/service-seller-sdk
 
@@ -12,62 +20,57 @@ import {
   paymentMiddlewareFromConfig,
 } from "@okxweb3/x402-express";
 import { OKXFacilitatorClient } from "@okxweb3/x402-core";
-import type { PaywallConfig } from "@okxweb3/x402-core/server";
 import { ExactEvmScheme } from "@okxweb3/x402-evm/exact/server";
 
-// RoutesConfig has a specific shape — we re-define it here since the SDK
-// doesn't export the type publicly.
-type RoutesConfig = Record<string, any>;
-
-export interface X402PaymentRequirements {
-  scheme: "exact";
-  network: string;        // CAIP-2 e.g. "eip155:196"
-  maxAmountRequired: string; // base units, e.g. "1500000" for $1.50 USDT0 (6 decimals)
-  resource: string;       // the URL being paid for
-  description: string;
-  mimeType: string;
-  outputSchema?: Record<string, unknown>;
-  payTo: string;          // receiving wallet
-  maxTimeoutSeconds: number;
-  asset: string;          // ERC-20 contract address
-  extra?: Record<string, unknown>;
-}
-
-export interface X402Challenge {
-  x402Version: 2;
-  resource: {
-    url: string;
-    description: string;
-    mimeType: string;
+// Route configuration shape expected by the official OKX SDK
+// Note: the SDK's `accepts` is a single object (not an array) inside a route config
+type RouteConfigEntry = {
+  accepts: {
+    scheme: string;
+    network: string;
+    payTo: string;
+    price: string; // "$1.50" format — SDK parses to amount in base units
+    maxTimeoutSeconds?: number;
+    extra?: Record<string, unknown>;
   };
-  accepted: X402PaymentRequirements;
-}
+  description?: string;
+  mimeType?: string;
+};
+type RoutesConfig = Record<string, RouteConfigEntry> | any;
 
-export function buildPaymentChallenge(resourceUrl: string, description: string): X402Challenge {
-  // USDT0 has 6 decimals. $1.50 = 1_500_000 base units.
-  const amountBaseUnits = String(Math.round(config.x402.auditPrice * 1_000_000));
+/**
+ * Build the canonical OKX x402 402 challenge in the exact shape expected by
+ * the OKX validator. Uses the same field names as the OKX SDK:
+ *   - "amount" (not "maxAmountRequired")
+ *   - "accepts" is an array (not a single object)
+ *   - "error" field included with "Payment required"
+ *
+ * This function is the SINGLE SOURCE OF TRUTH for the 402 challenge shape.
+ * Both the unpaid handler and the paid-audit page render this same shape.
+ */
+export function buildPaymentChallenge(resourceUrl: string, description: string) {
   return {
-    x402Version: 2,
+    x402Version: 2 as const,
+    error: "Payment required",
     resource: {
       url: resourceUrl,
       description,
       mimeType: "application/json",
     },
-    accepted: {
-      scheme: "exact",
-      network: config.x402.network,
-      maxAmountRequired: amountBaseUnits,
-      resource: resourceUrl,
-      description,
-      mimeType: "application/json",
-      payTo: config.x402.receivingWallet,
-      maxTimeoutSeconds: 300,
-      asset: config.x402.asset,
-      extra: {
-        name: "USD₮0",
-        version: "1",
+    accepts: [
+      {
+        scheme: "exact",
+        network: config.x402.network, // "eip155:196"
+        amount: String(Math.round(config.x402.auditPrice * 1_000_000)), // "1500000" for 1.5 USDT0 (6 decimals)
+        asset: config.x402.asset, // USDT0 contract on X Layer
+        payTo: config.x402.receivingWallet, // VEY1 receiving wallet
+        maxTimeoutSeconds: 300,
+        extra: {
+          name: "USD₮0",
+          version: "1",
+        },
       },
-    },
+    ],
   };
 }
 
@@ -79,7 +82,7 @@ export function paymentRequiredResponse(resourceUrl: string, description: string
 }
 
 /** Lightweight verification: presence + base64-shape check.
- *  Production: replace with real signature verification via x402 facilitator. */
+ *  Real signature verification requires the OKX facilitator. */
 export function isPaymentHeaderValid(header: string | undefined): boolean {
   if (!header) return false;
   try {
@@ -101,23 +104,18 @@ export function isPaymentHeaderValid(header: string | undefined): boolean {
 
 /**
  * Build the canonical OKX x402 payment middleware for our /v1/audit endpoint.
- * Uses the official @okxweb3/x402-express middleware, adapted to work with
- * Fastify (the Express middleware is an (req, res, next) function that we
- * can wire up directly via fastify.addHook).
+ * Uses the official @okxweb3/x402-express middleware.
  *
- * Requires env vars:
+ * Requires env vars (for full facilitator integration):
  *   OKX_FACILITATOR_API_KEY      — OKX exchange API key (Read-only permission)
  *   OKX_FACILITATOR_SECRET_KEY   — API secret
  *   OKX_FACILITATOR_PASSPHRASE   — API passphrase
  *
- * Without these, the facilitator client will throw on init and the middleware
- * builder returns null. In that case the server falls back to the minimal
- * 402 challenge (no facilitator, no auto-verification) so the demo still
- * works for listing review.
+ * Without these, returns null. The server falls back to manually emitting
+ * the proper 402 challenge (same shape as the SDK would emit).
  */
 export function buildX402Middleware(): ((req: any, res: any, next?: any) => Promise<any>) | null {
   if (!process.env.OKX_FACILITATOR_API_KEY || !process.env.OKX_FACILITATOR_SECRET_KEY || !process.env.OKX_FACILITATOR_PASSPHRASE) {
-    console.warn("[x402] facilitator credentials not set — falling back to minimal 402 challenge");
     return null;
   }
   try {
@@ -126,27 +124,27 @@ export function buildX402Middleware(): ((req: any, res: any, next?: any) => Prom
       secretKey: process.env.OKX_FACILITATOR_SECRET_KEY,
       passphrase: process.env.OKX_FACILITATOR_PASSPHRASE,
     });
-    const server = new x402ResourceServer(facilitator);
-    server.register(config.x402.network as `${string}:${string}`, new ExactEvmScheme());
     const routes: RoutesConfig = {
       "POST /v1/audit": {
-        accepts: [
-          {
-            scheme: "exact",
-            network: config.x402.network as any,
-            payTo: config.x402.receivingWallet,
-            price: `$${config.x402.auditPrice.toFixed(2)}`,
-          },
-        ],
+        accepts: {
+          scheme: "exact",
+          network: config.x402.network,
+          payTo: config.x402.receivingWallet,
+          price: `$${config.x402.auditPrice.toFixed(2)}`, // "$1.50" — SDK parses
+          maxTimeoutSeconds: 300,
+        },
         description: "VEY1 forensic project audit — returns a 12-18 page PDF",
         mimeType: "application/json",
       },
     };
-    const paywall: PaywallConfig = {
-      appName: "VEY1",
-      testnet: false,
-    };
-    return paymentMiddlewareFromConfig(routes, facilitator, [], paywall);
+    return paymentMiddlewareFromConfig(
+      routes,
+      facilitator,
+      [],
+      { appName: "VEY1", testnet: false },
+      undefined,
+      false, // syncFacilitatorOnStart: false — don't block server startup
+    );
   } catch (e) {
     console.error("[x402] failed to build middleware:", e);
     return null;
