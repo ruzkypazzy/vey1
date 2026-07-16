@@ -40,6 +40,21 @@ async function main() {
   app.get("/ready", async () => ({ ok: true, ts: Date.now() }));
   app.get("/health", async () => ({ ok: true, ts: Date.now() }));
 
+  // Admin: Tavily status (for monitoring credit usage)
+  app.get("/admin/tavily", async () => {
+    const { getTavilyStatus } = await import("./services/research.js");
+    const status = getTavilyStatus();
+    return {
+      ...status,
+      keyConfigured: !!process.env.TAVILY_API_KEY,
+      hint: !status.disabled && !status.available
+        ? "Tavily has had 3+ consecutive failures (likely 429 rate-limited). Set TAVILY_DISABLED=1 to disable."
+        : status.disabled
+          ? "Tavily is disabled (TAVILY_DISABLED=1 or no key)"
+          : "OK",
+    };
+  });
+
   // API docs (proper HTML page, not raw JSON)
   app.get("/api-docs", async (_req, reply) => {
     const path = resolve(publicDir, "api-docs.html");

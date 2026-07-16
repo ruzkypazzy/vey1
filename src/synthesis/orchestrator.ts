@@ -13,7 +13,7 @@ import { auditWallet } from "../audit/onchain.js";
 import { buildTeam } from "../audit/team.js";
 import { synthesizeAudit, buildReport } from "./prompt.js";
 import { buildDossier, checkOnchainosAvailable, canMakePaidCalls, type OnchainDossier } from "../services/onchainos.js";
-import { researchProject, getNewsForProject, getRiskEvidence, type ResearchReport } from "../services/research.js";
+import { researchProject, getNewsForProject, getRiskEvidence, getTavilyStatus, TavilyExhaustedError, type ResearchReport } from "../services/research.js";
 import type {
   ProjectAudit,
   ProjectIdentity,
@@ -133,7 +133,12 @@ export async function runAudit(
   // bulk of the report). This runs BEFORE OnchainOS so we have project identity +
   // market context + recent news to feed the LLM.
   let research: ResearchReport | null = null;
-  if (process.env.TAVILY_API_KEY || process.env.RESEARCH_DISABLED !== "1") {
+  const tavilyStatus = getTavilyStatus();
+  if (tavilyStatus.disabled) {
+    evidence.push({ type: "info", ref: "research", note: "Tavily disabled by env or unset key" });
+  } else {
+    // Pay-as-you-go is on — Tavily never gets auto-disabled, even if it returns 429 transiently.
+    // We still let errors propagate so the user gets a 502 rather than a silently weak report.
     try {
       research = await researchProject(input.query, {
         includeGithub: true,
@@ -148,11 +153,34 @@ export async function runAudit(
         note: `tavily=${research.totalCost} calls, ${research.findings.length} findings, ${research.searchQueries.length} queries`,
       });
     } catch (e) {
-      console.error(`[orchestrator] research failed: ${e instanceof Error ? e.message : String(e)}`);
-      evidence.push({ type: "error", ref: "research", note: String(e) });
+      if (e instanceof TavilyExhaustedError) {
+        // Retry once after 2s in case of transient 429 from pay-as-you-go billing
+        console.warn(`[orchestrator] Tavily ${e.status} (likely billing transient). Retrying once.`);
+        evidence.push({ type: "info", ref: "research", note: `Tavily ${e.status}, retrying in 2s` });
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          research = await researchProject(input.query, {
+            includeGithub: true,
+            includeCoinGecko: true,
+            onProgress: (stage, info) => {
+              evidence.push({ type: "research", ref: stage, note: info });
+            },
+          });
+          evidence.push({
+            type: "research",
+            ref: "summary",
+            note: `tavily=${research.totalCost} calls (after retry), ${research.findings.length} findings`,
+          });
+        } catch (e2) {
+          // Still failing — surface the error so the user knows Tavily is down
+          console.error(`[orchestrator] research retry failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+          throw new Error(`Web research unavailable: ${e2 instanceof Error ? e2.message : String(e2)}`);
+        }
+      } else {
+        console.error(`[orchestrator] research failed: ${e instanceof Error ? e.message : String(e)}`);
+        throw e;
+      }
     }
-  } else {
-    evidence.push({ type: "info", ref: "research", note: "disabled" });
   }
 
   // Stage 4: build team (now informed by the dossier's deployer + other tokens)

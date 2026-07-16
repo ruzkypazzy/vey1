@@ -15,6 +15,26 @@
 
 import { safeFetch } from "../utils/undici.js";
 
+// Track Tavily failures for visibility (pay-as-you-go so we don't auto-disable)
+let tavilyConsecutiveFailures = 0;
+let tavilyLastFailure: { status: number; ts: number } | null = null;
+
+export function getTavilyStatus(): { available: boolean; consecutiveFailures: number; lastFailure: { status: number; ts: number } | null; disabled: boolean } {
+  return {
+    available: true, // pay-as-you-go is on, never auto-disable
+    consecutiveFailures: tavilyConsecutiveFailures,
+    lastFailure: tavilyLastFailure,
+    disabled: process.env.TAVILY_DISABLED === "1" || !TAVILY_KEY,
+  };
+}
+
+export class TavilyExhaustedError extends Error {
+  constructor(public status: number) {
+    super(`Tavily API error (status ${status})`);
+    this.name = "TavilyExhaustedError";
+  }
+}
+
 const TAVILY_URL = "https://api.tavily.com/search";
 const TAVILY_KEY = process.env.TAVILY_API_KEY ?? "";
 
@@ -94,8 +114,14 @@ async function tavilySearch(
   });
   if (!r.ok) {
     const text = await r.text();
+    tavilyLastFailure = { status: r.status, ts: Date.now() };
+    if (r.status === 429 || r.status === 402 || r.status === 403) {
+      tavilyConsecutiveFailures++;
+      throw new TavilyExhaustedError(r.status);
+    }
     throw new Error(`Tavily ${r.status}: ${text.slice(0, 200)}`);
   }
+  tavilyConsecutiveFailures = 0; // reset on success
   const data = (await r.json()) as TavilyResponse;
   return { results: data.results ?? [], answer: data.answer };
 }
@@ -291,31 +317,25 @@ export async function researchProject(
         // continue
       }
 
-      // Then specific queries for facts
-      const factQueries = [
-        `${query} crypto founder CEO team`,
-        `${query} cryptocurrency launch date history`,
-        `${query} crypto audit firms report`,
-      ];
-      for (const identQ of factQueries) {
-        searchQueries.push(identQ);
-        try {
-          const { results } = await tavilySearch(identQ, { maxResults: 4 });
-          totalCost += 1;
-          for (const r of results) {
-            findings.push({
-              source: "tavily-search",
-              category: "general",
-              title: r.title,
-              url: r.url,
-              content: r.content,
-              date: r.published_date,
-              score: r.score,
-            });
-          }
-        } catch (e) {
-          // continue
+      // Then ONE specific query for facts (combines founder, history, audit)
+      const factQ = `${query} cryptocurrency founder history team audit launch year`;
+      searchQueries.push(factQ);
+      try {
+        const { results } = await tavilySearch(factQ, { maxResults: 5 });
+        totalCost += 1;
+        for (const r of results) {
+          findings.push({
+            source: "tavily-search",
+            category: "general",
+            title: r.title,
+            url: r.url,
+            content: r.content,
+            date: r.published_date,
+            score: r.score,
+          });
         }
+      } catch (e) {
+        // continue
       }
     } catch (e) {
       findings.push({
@@ -327,59 +347,48 @@ export async function researchProject(
     }
   }
 
-  // 2. News search specifically (last 90 days)
+  // 2. ONE news search (combines news + partnership + launch)
   if (TAVILY_KEY) {
     options.onProgress?.("news", "Tavily: recent news");
     try {
-      const newsQueries = [
-        `${query} news 2026 announcement`,
-        `${query} crypto partnership OR launch OR integration`,
-      ];
-      for (const q of newsQueries) {
-        searchQueries.push(q);
-        const { results } = await tavilySearch(q, { maxResults: 6, topic: "news" });
-        totalCost += 1;
-        for (const r of results) {
-          findings.push({
-            source: "tavily-search",
-            category: "news",
-            title: r.title,
-            url: r.url,
-            content: r.content,
-            date: r.published_date,
-            score: r.score,
-          });
-        }
+      const newsQ = `${query} cryptocurrency news 2026 launch partnership integration`;
+      searchQueries.push(newsQ);
+      const { results } = await tavilySearch(newsQ, { maxResults: 5, topic: "news" });
+      totalCost += 1;
+      for (const r of results) {
+        findings.push({
+          source: "tavily-search",
+          category: "news",
+          title: r.title,
+          url: r.url,
+          content: r.content,
+          date: r.published_date,
+          score: r.score,
+        });
       }
     } catch (e) {
       // continue
     }
   }
 
-  // 3. Risk search — explicit red flag check
+  // 3. ONE risk search (combines scam + hack + team)
   if (TAVILY_KEY) {
     options.onProgress?.("risks", "Tavily: risk pattern check");
     try {
-      const riskQueries = [
-        `${query} scam review complaints`,
-        `${query} hack exploit vulnerability report`,
-        `${query} team anonymous doxxed founders`,
-      ];
-      for (const q of riskQueries) {
-        searchQueries.push(q);
-        const { results } = await tavilySearch(q, { maxResults: 5 });
-        totalCost += 1;
-        for (const r of results) {
-          findings.push({
-            source: "tavily-search",
-            category: "risks",
-            title: r.title,
-            url: r.url,
-            content: r.content,
-            date: r.published_date,
-            score: r.score,
-          });
-        }
+      const riskQ = `${query} crypto scam hack exploit risk complaint OR team anonymous`;
+      searchQueries.push(riskQ);
+      const { results } = await tavilySearch(riskQ, { maxResults: 4 });
+      totalCost += 1;
+      for (const r of results) {
+        findings.push({
+          source: "tavily-search",
+          category: "risks",
+          title: r.title,
+          url: r.url,
+          content: r.content,
+          date: r.published_date,
+          score: r.score,
+        });
       }
     } catch (e) {
       // continue
