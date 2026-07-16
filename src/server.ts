@@ -11,7 +11,7 @@ import { config } from "./config/secrets.js";
 import { existsSync, readFileSync, readFile, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
-import { buildPaymentChallenge, isPaymentHeaderValid } from "./utils/x402.js";
+import { buildPaymentChallenge, buildX402Middleware, isPaymentHeaderValid } from "./utils/x402.js";
 import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -165,13 +165,14 @@ async function main() {
   });
 
   // The actual audit endpoint — paywalled
-  app.post("/v1/audit", async (req, reply) => {
-    const paymentHeader = req.headers["x-payment"];
+  // Use the official OKX x402 SDK middleware if facilitator credentials are set.
+  // Otherwise fall back to the manual 402 challenge.
+  const x402Middleware = buildX402Middleware();
+  app.post("/v1/audit", { preHandler: x402Middleware ?? undefined }, async (req, reply) => {
+    const paymentHeader = req.headers["payment-signature"] ?? req.headers["x-payment"];
     const paymentHeaderStr = Array.isArray(paymentHeader) ? paymentHeader[0] : paymentHeader;
     if (!isPaymentHeaderValid(paymentHeaderStr)) {
-      // OKX validator requirement: 402 with `PAYMENT-REQUIRED` response header
-      // containing the base64-encoded challenge. This is the canonical x402
-      // v2 signal. See: https://x402.org/spec
+      // Fallback: manual 402 challenge (used when no facilitator credentials are set)
       const challenge = buildPaymentChallenge(
         `${config.publicBaseUrl}/v1/audit`,
         "VEY1 forensic project audit — returns a 12-18 page PDF",
