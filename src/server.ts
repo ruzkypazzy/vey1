@@ -47,6 +47,13 @@ async function main() {
     reply.type("text/html; charset=utf-8").send(content);
   });
 
+  // Paid audit landing page (x402 flow)
+  app.get("/paid-audit", async (_req, reply) => {
+    const path = resolve(publicDir, "paid-audit.html");
+    const content = readFileSync(path, "utf8");
+    reply.type("text/html; charset=utf-8").send(content);
+  });
+
   // Discovery: what VEY1 is, what it costs, how to call it
   app.get("/v1/info", async () => ({
     name: "VEY1",
