@@ -374,11 +374,11 @@
         </div>
         <div class="pay-detail-row">
           <span class="label">Recipient (VEY1 wallet)</span>
-          <span class="value" style="font-size: 12px;">${accepts.payTo ?? accepts.resource ?? "0x72233b78747765244855dd27180bbed9c0245f96"}</span>
+          <span class="value" style="font-size: 12px;">${accepts.payTo ?? "0x72233b78747765244855dd27180bbed9c0245f96"}</span>
         </div>
         <div class="pay-detail-row">
           <span class="label">Resource</span>
-          <span class="value" style="font-size: 12px;">${accepts.resource ?? "/v1/audit"}</span>
+          <span class="value" style="font-size: 12px;">${accepts.resource?.url ?? c.resource?.url ?? "/v1/audit"}</span>
         </div>
       `;
       // Show the raw 402 challenge
