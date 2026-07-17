@@ -14,6 +14,86 @@ import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentChallenge, buildX402Middleware, isPaymentHeaderValid } from "./utils/x402.js";
 import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
+// Adapter: wrap an Express-style (req, res, next) handler as a Fastify
+// preHandler. The x402 SDK middleware is Express-style; Fastify needs a
+// preHandler with (req, reply) signature.
+function expressToFastify(expressHandler: (req: any, res: any, next: any) => any) {
+  return async (req: any, reply: any) => {
+    let responseSent = false;
+    const res: any = {
+      setHeader(name: string, value: any) {
+        reply.header(name, value);
+        return res;
+      },
+      writeHead(code: number, headers?: any) {
+        reply.code(code);
+        if (headers) {
+          for (const [k, v] of Object.entries(headers)) {
+            reply.header(k, v as any);
+          }
+        }
+        return res;
+      },
+      write(_chunk: any) {
+        return true;
+      },
+      end(chunk?: any) {
+        responseSent = true;
+        if (!reply.sent) {
+          if (chunk) reply.send(chunk);
+          else reply.send();
+        }
+        return res;
+      },
+      json(body: any) {
+        responseSent = true;
+        if (!reply.sent) reply.send(body);
+      },
+      send(body: any) {
+        responseSent = true;
+        if (!reply.sent) reply.send(body);
+      },
+      status(code: number) {
+        reply.code(code);
+        return res;
+      },
+      flushHeaders() {
+        // no-op
+      },
+      headersSent: false,
+    };
+    const expressReq: any = {
+      method: req.method,
+      path: req.url.split("?")[0],
+      originalUrl: req.url,
+      url: `${req.protocol}://${req.headers.host}${req.url}`,
+      protocol: req.protocol,
+      headers: { ...req.headers },
+      header(name: string) {
+        const v = req.headers[name.toLowerCase()];
+        return Array.isArray(v) ? v[0] : v;
+      },
+      query: req.query,
+      body: req.body,
+      ip: req.ip,
+    };
+    let nextCalled = false;
+    const next = (err?: any) => {
+      if (err) throw err;
+      nextCalled = true;
+    };
+    try {
+      const result = expressHandler(expressReq, res, next);
+      if (result && typeof result.then === "function") {
+        await result;
+      }
+    } catch (e) {
+      // SDK errored — let it propagate so Fastify handles it
+      throw e;
+    }
+  };
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(__dirname, "..", "public");
 
@@ -166,9 +246,12 @@ async function main() {
 
   // The actual audit endpoint — paywalled
   // Use the official OKX x402 SDK middleware if facilitator credentials are set.
-  // Otherwise fall back to the manual 402 challenge.
+  // The SDK middleware pre-populates supportedResponsesMap so it doesn't need to
+  // call the broken getSupported() endpoint, and it self-recovers from 5xx errors
+  // by serving the spec-compliant 402 challenge.
   const x402Middleware = buildX402Middleware();
-  app.post("/v1/audit", { preHandler: x402Middleware ?? undefined }, async (req, reply) => {
+  const x402FastifyHandler = expressToFastify(x402Middleware);
+  app.post("/v1/audit", { preHandler: x402FastifyHandler }, async (req, reply) => {
     const paymentHeader = req.headers["payment-signature"] ?? req.headers["x-payment"];
     const paymentHeaderStr = Array.isArray(paymentHeader) ? paymentHeader[0] : paymentHeader;
     if (!isPaymentHeaderValid(paymentHeaderStr)) {
