@@ -4,12 +4,6 @@
 // a real OKXFacilitatorClient (HMAC-SHA256 signed requests against
 // https://web3.okx.com/api/v6/pay/x402/*).
 //
-// On unpaid requests the SDK returns a standard 402 challenge in the
-// OKX x402 v2 spec format (per /onchainos/dev-docs/okxai/howtomcp).
-// On paid requests the SDK verifies the X-PAYMENT / PAYMENT-SIGNATURE
-// header by calling the OKX facilitator's /verify endpoint, then
-// forwards the request to the route handler which delivers the audit.
-//
 // Strategy (mirrors VERSE2's working approach):
 // 1. Pre-populate the ResourceServer's `supportedResponsesMap` with the
 //    eip155:196 + exact kind. This avoids the broken `getSupported()`
@@ -40,10 +34,9 @@ const PUBLIC_BASE_URL = config.publicBaseUrl;
  * Build the canonical OKX x402 402 challenge in the EXACT shape the
  * OKX validator expects (per /onchainos/dev-docs/okxai/howtomcp).
  *
- * IMPORTANT: the spec example shows ONLY these fields. Any extra fields
- * (like "error" or "decimals") will cause validation to fail because the
- * marketplace validator does strict shape matching on the base64-encoded
- * PAYMENT-REQUIRED header.
+ * Spec example only includes: x402Version, resource{url,description,mimeType},
+ * accepts[{scheme,network,asset,amount,payTo,maxTimeoutSeconds,extra:{name,version}}].
+ * No "error" or "decimals" field — those break the marketplace validator.
  */
 export function buildPaymentChallenge(resourceUrl: string, description: string) {
   return {
@@ -195,12 +188,6 @@ export function buildX402Middleware(): RequestHandler {
   (resourceServer as unknown as { facilitatorClientsMap: Map<number, Map<string, Map<string, unknown>>> }).facilitatorClientsMap = new Map([
     [2, new Map([[NETWORK, new Map([["exact", facilitator]])]])],
   ]);
-  // VERIFY pre-population worked
-  const verifyMap = (resourceServer as any).supportedResponsesMap;
-  const verifyResult = verifyMap?.get(2)?.get(NETWORK)?.get("exact");
-  console.log(`[x402] pre-populated supportedResponsesMap. keys=${JSON.stringify(Array.from(versionMap.keys()))}, networkMap keys=${JSON.stringify(Array.from(networkMap.keys()))}, schemeMap keys=${JSON.stringify(Array.from(schemeMap.keys()))}`);
-  console.log(`[x402] verify: getSupportedKind(2, ${NETWORK}, 'exact') =>`, verifyResult ? "FOUND" : "NOT FOUND");
-  console.log(`[x402] resourceServer.registeredServerSchemes keys:`, JSON.stringify(Array.from((resourceServer as any).registeredServerSchemes?.keys() || [])));
   resourceServer.register(NETWORK, scheme);
 
   // Add a 30s timeout to all facilitator fetch calls. The OKX web3 API endpoint
@@ -345,4 +332,3 @@ export function isPaymentHeaderValid(header: string | undefined): boolean {
 }
 
 export const _isPaymentHeaderValid = isPaymentHeaderValid;
-// Build trigger Fri Jul 17 04:36:45 UTC 2026
