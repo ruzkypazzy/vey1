@@ -11,12 +11,13 @@ import { config } from "./config/secrets.js";
 import { existsSync, readFileSync, readFile, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
-import { buildPaymentChallenge, buildX402Middleware, isPaymentHeaderValid } from "./utils/x402.js";
+import { buildPaymentChallenge, isPaymentHeaderValid, requirePayment, paymentVerifyHandler } from "./utils/x402.js";
 import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
-// Adapter: wrap an Express-style (req, res, next) handler as a Fastify
-// preHandler. The x402 SDK middleware is Express-style; Fastify needs a
-// preHandler with (req, reply) signature.
+// Adapter kept for backwards compat — no longer used since the OKX APP
+// middleware is Fastify-native. The x402 SDK middleware is no longer used
+// because the OKX web3 facilitator's /verify endpoint is blocked from
+// Railway's egress IP by Cloudflare 1010.
 function expressToFastify(expressHandler: (req: any, res: any, next: any) => any) {
   return async (req: any, reply: any) => {
     let responseSent = false;
@@ -165,6 +166,10 @@ async function main() {
   });
 
   // Discovery: what VEY1 is, what it costs, how to call it
+  // APP payment verification endpoint — broker calls this to confirm a payment
+  // was accepted by the seller.
+  app.post("/v1/payment/verify", paymentVerifyHandler);
+
   app.get("/v1/info", async () => ({
     name: "VEY1",
     description: "Forensic crypto project due diligence. Pass a project name, get a 12-18 page PDF.",
@@ -179,18 +184,10 @@ async function main() {
     },
   }));
 
-  // x402 challenge endpoint — clients GET this to learn the price
-  app.get("/v1/audit", async (_req, reply) => {
-    const challenge = buildPaymentChallenge(
-      `${config.publicBaseUrl}/v1/audit`,
-      "VEY1 forensic project audit — returns a 12-18 page PDF",
-    );
-    const encoded = Buffer.from(JSON.stringify(challenge), "utf8").toString("base64");
-    reply
-      .code(402)
-      .header("PAYMENT-REQUIRED", encoded)
-      .header("X-PAYMENT-REQUIRED", encoded)
-      .send(challenge);
+  // OKX APP 402 challenge endpoint — clients GET this to learn the price.
+  // Uses the Agent Payments Protocol shape (WWW-Authenticate: Payment, X-Payment-*).
+  app.get("/v1/audit", async (req, reply) => {
+    await requirePayment(req, reply, config.x402.auditPrice);
   });
 
   // Free demo endpoint — runs an audit on any project (no x402, no payment)
@@ -259,30 +256,14 @@ async function main() {
     }
   });
 
-  // The actual audit endpoint — paywalled
-  // Use the official OKX x402 SDK middleware if facilitator credentials are set.
-  // The SDK middleware pre-populates supportedResponsesMap so it doesn't need to
-  // call the broken getSupported() endpoint, and it self-recovers from 5xx errors
-  // by serving the spec-compliant 402 challenge.
-  const x402Middleware = buildX402Middleware();
-  const x402FastifyHandler = expressToFastify(x402Middleware);
-  app.post("/v1/audit", { preHandler: x402FastifyHandler }, async (req, reply) => {
-    const paymentHeader = req.headers["payment-signature"] ?? req.headers["x-payment"];
-    const paymentHeaderStr = Array.isArray(paymentHeader) ? paymentHeader[0] : paymentHeader;
-    if (!isPaymentHeaderValid(paymentHeaderStr)) {
-      // Fallback: manual 402 challenge (used when no facilitator credentials are set)
-      const challenge = buildPaymentChallenge(
-        `${config.publicBaseUrl}/v1/audit`,
-        "VEY1 forensic project audit — returns a 12-18 page PDF",
-      );
-      const encoded = Buffer.from(JSON.stringify(challenge), "utf8").toString("base64");
-      reply
-        .code(402)
-        .header("PAYMENT-REQUIRED", encoded)
-        .header("X-PAYMENT-REQUIRED", encoded)
-        .send(challenge);
-      return;
-    }
+  // The actual audit endpoint — paywalled via OKX Agent Payments Protocol (APP).
+  // The requirePayment() helper checks for X-Payment-Id + X-Payment headers;
+  // if absent, it sends a 402 challenge with WWW-Authenticate: Payment and
+  // the APP challenge shape. This avoids the OKX web3 facilitator's /verify
+  // endpoint (which is blocked from Railway's egress IP by Cloudflare 1010).
+  app.post("/v1/audit", async (req, reply) => {
+    const ok = await requirePayment(req, reply, config.x402.auditPrice);
+    if (!ok) return;
 
     const body = (req.body ?? {}) as {
       query?: string;
