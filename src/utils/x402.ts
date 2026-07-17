@@ -37,12 +37,17 @@ const APP_NAME = "VEY1";
 const PUBLIC_BASE_URL = config.publicBaseUrl;
 
 /**
- * Build the canonical OKX x402 402 challenge in the exact shape the
+ * Build the canonical OKX x402 402 challenge in the EXACT shape the
  * OKX validator expects (per /onchainos/dev-docs/okxai/howtomcp).
+ *
+ * IMPORTANT: the spec example shows ONLY these fields. Any extra fields
+ * (like "error" or "decimals") will cause validation to fail because the
+ * marketplace validator does strict shape matching on the base64-encoded
+ * PAYMENT-REQUIRED header.
  */
 export function buildPaymentChallenge(resourceUrl: string, description: string) {
   return {
-    x402Version: 2 as const,
+    x402Version: 2,
     resource: {
       url: resourceUrl,
       description,
@@ -50,16 +55,15 @@ export function buildPaymentChallenge(resourceUrl: string, description: string) 
     },
     accepts: [
       {
-        scheme: "exact" as const,
+        scheme: "exact",
         network: NETWORK,
         asset: ASSET,
         amount: String(Math.round(config.x402.auditPrice * 1_000_000)),
         payTo: config.x402.receivingWallet,
         maxTimeoutSeconds: 300,
-        extra: { name: "USD\u20ae0", version: "1", decimals: 6 },
+        extra: { name: "USD\u20ae0", version: "1" },
       },
     ],
-    error: "Payment required",
   };
 }
 
@@ -105,8 +109,11 @@ function buildFacilitatorClient(): OKXFacilitatorClient {
   });
 }
 
-// Build a standard 402 challenge in the OKX x402 v2 spec format.
+// Build a standard 402 challenge in the EXACT OKX x402 v2 spec format.
 // The format is documented at /onchainos/dev-docs/okxai/howtomcp.
+// Spec example only includes: x402Version, resource{url,description,mimeType},
+// accepts[{scheme,network,asset,amount,payTo,maxTimeoutSeconds,extra:{name,version}}].
+// No "error" or "decimals" field — those break the marketplace validator.
 function build402Challenge(reqPath: string): { challenge: object; priceUSDT: number } | null {
   if (reqPath !== "/v1/audit") {
     return null;
@@ -128,10 +135,9 @@ function build402Challenge(reqPath: string): { challenge: object; priceUSDT: num
         amount: String(Math.round(priceUSDT * 1_000_000)),
         payTo: config.x402.receivingWallet,
         maxTimeoutSeconds: 300,
-        extra: { name: "USD\u20ae0", version: "1", decimals: 6 },
+        extra: { name: "USD\u20ae0", version: "1" },
       },
     ],
-    error: "Payment required",
   };
   return { challenge, priceUSDT };
 }
