@@ -88,8 +88,23 @@ function expressToFastify(expressHandler: (req: any, res: any, next: any) => any
         await result;
       }
     } catch (e) {
-      // SDK errored — let it propagate so Fastify handles it
-      throw e;
+      // SDK errored — serve the spec-compliant 402 challenge ourselves.
+      // The SDK threw because the facilitator is unreachable or the API key
+      // is invalid; either way, the spec-compliant 402 is the correct
+      // response for an unpaid request.
+      console.error("[x402 adapter] SDK threw:", e instanceof Error ? e.message : e);
+      if (!reply.sent) {
+        const challenge = buildPaymentChallenge(
+          `${config.publicBaseUrl}/v1/audit`,
+          "VEY1 forensic project audit — returns a 12-18 page PDF",
+        );
+        const encoded = Buffer.from(JSON.stringify(challenge), "utf8").toString("base64");
+        reply
+          .code(402)
+          .header("PAYMENT-REQUIRED", encoded)
+          .header("X-PAYMENT-REQUIRED", encoded)
+          .send(challenge);
+      }
     }
   };
 }
