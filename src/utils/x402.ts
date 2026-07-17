@@ -189,7 +189,12 @@ export function buildX402Middleware(): RequestHandler {
   (resourceServer as unknown as { facilitatorClientsMap: Map<number, Map<string, Map<string, unknown>>> }).facilitatorClientsMap = new Map([
     [2, new Map([[NETWORK, new Map([["exact", facilitator]])]])],
   ]);
+  // VERIFY pre-population worked
+  const verifyMap = (resourceServer as any).supportedResponsesMap;
+  const verifyResult = verifyMap?.get(2)?.get(NETWORK)?.get("exact");
   console.log(`[x402] pre-populated supportedResponsesMap. keys=${JSON.stringify(Array.from(versionMap.keys()))}, networkMap keys=${JSON.stringify(Array.from(networkMap.keys()))}, schemeMap keys=${JSON.stringify(Array.from(schemeMap.keys()))}`);
+  console.log(`[x402] verify: getSupportedKind(2, ${NETWORK}, 'exact') =>`, verifyResult ? "FOUND" : "NOT FOUND");
+  console.log(`[x402] resourceServer.registeredServerSchemes keys:`, JSON.stringify(Array.from((resourceServer as any).registeredServerSchemes?.keys() || [])));
   resourceServer.register(NETWORK, scheme);
 
   // Add a 30s timeout to all facilitator fetch calls. The OKX web3 API endpoint
