@@ -356,7 +356,19 @@
 
     // Banner — Use marketplace
     $("banner-use-marketplace")?.addEventListener("click", () => {
-      window.open(`https://www.okx.ai/agents/${VEY1_AGENT_ID}`, "_blank", "noopener");
+      // Try the direct agent page first. If it 404s, fall back to the marketplace search.
+      fetch(`https://www.okx.ai/agents/${VEY1_AGENT_ID}`, { method: "HEAD" })
+        .then((r) => {
+          if (r.ok) {
+            window.open(`https://www.okx.ai/agents/${VEY1_AGENT_ID}`, "_blank", "noopener");
+          } else {
+            // Not yet listed — open the marketplace search instead
+            window.open("https://www.okx.ai/agents", "_blank", "noopener");
+          }
+        })
+        .catch(() => {
+          window.open("https://www.okx.ai/agents", "_blank", "noopener");
+        });
     });
 
     // Banner — Use demo (free) — skip the 402 by hitting /v1/demo
@@ -388,10 +400,17 @@
     // Step 2: open marketplace
     $("use-marketplace-btn").addEventListener("click", () => {
       const query = localStorage.getItem("vey1:lastQuery") ?? "";
-      // Marketplace URL with deep link to the agent. Once listed, the marketplace
-      // also accepts a ?q=... query param for the agent to prefill.
-      const url = `https://www.okx.ai/agents/${VEY1_AGENT_ID}` + (query ? `?q=${encodeURIComponent(query)}` : "");
-      window.open(url, "_blank", "noopener");
+      // Try the direct agent page first; fall back to the marketplace search if 404
+      fetch(`https://www.okx.ai/agents/${VEY1_AGENT_ID}`, { method: "HEAD" })
+        .then((r) => {
+          const url = r.ok
+            ? `https://www.okx.ai/agents/${VEY1_AGENT_ID}` + (query ? `?q=${encodeURIComponent(query)}` : "")
+            : "https://www.okx.ai/agents";
+          window.open(url, "_blank", "noopener");
+        })
+        .catch(() => {
+          window.open("https://www.okx.ai/agents", "_blank", "noopener");
+        });
     });
 
     // Step 2: copy invoke command (for the onchainos CLI users)
