@@ -163,7 +163,7 @@ export function buildPaymentLayer(): {
   });
 
 
-  const middleware = paymentMiddlewareFromHTTPServer(
+  const sdkMiddleware = paymentMiddlewareFromHTTPServer(
     httpServer,
     {
       appName: AGENT_NAME,
@@ -172,6 +172,42 @@ export function buildPaymentLayer(): {
     undefined,
     false,
   );
+
+  // Wrap the SDK middleware: augment the 402 response with the OKX Agent
+  // Payments Protocol (APP) headers + a populated JSON body. The OKX
+  // marketplace + facilitator use these to discover the verify endpoint
+  // and to give clients a more developer-friendly 402 challenge than the
+  // strict x402 base64-only payload.
+  //
+  // Implementation: intercept res.json() so we can add body fields BEFORE
+  // the response is flushed. The SDK calls res.json({}) with the challenge
+  // in the base64 header; we replace the body with the decoded challenge.
+  const verifyUrl = `${config.publicBaseUrl}/v1/payment/verify`;
+  const middleware: RequestHandler = (req, res, next) => {
+    const origJson = res.json.bind(res);
+    (res as unknown as { json: typeof res.json }).json = function (body?: unknown) {
+      if (res.statusCode === 402) {
+        const pr = res.getHeader("payment-required") || res.getHeader("PAYMENT-REQUIRED");
+        if (typeof pr === "string") {
+          res.setHeader("WWW-Authenticate", `Payment realm="${AGENT_NAME.toLowerCase()}", charset="UTF-8"`);
+          res.setHeader("X-Payment-Endpoint", verifyUrl);
+          res.setHeader("X-Payment-Protocol", "okx-app/1.0");
+          res.setHeader("X-Payment-Version", "1.0");
+          res.setHeader("X-Payment-Required", "true");
+          try {
+            const decoded = JSON.parse(Buffer.from(pr, "base64").toString("utf8")) as Record<string, unknown>;
+            decoded.docs = `${config.publicBaseUrl}/api-docs`;
+            decoded.accepted_schemes = ["exact"];
+            return origJson(decoded);
+          } catch {
+            // fall through to original body
+          }
+        }
+      }
+      return origJson(body);
+    } as typeof res.json;
+    sdkMiddleware(req, res, next);
+  };
 
   return {
     middleware,
