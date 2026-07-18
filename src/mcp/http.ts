@@ -1,28 +1,101 @@
 // src/mcp/http.ts
-// HTTP handler for the A2MCP endpoint at POST /mcp.
+// MCP-over-HTTP handler for VEY1.
 //
-// Two flows:
-//  1. Free handshake: `initialize` and `tools/list` return 200 immediately
-//     (MCP JSON-RPC 2.0) so the OKX.AI marketplace reviewer can list our
-//     tools and verify the listing without paying.
-//  2. Paid tool call: `tools/call` requires the OKX x402 payment. The
-//     unpaid request returns 402 with the standard OKX challenge.
+// Payment flow (single source of truth):
+//   1. The OKX SDK middleware (mounted in server.ts) handles 402 challenges
+//      and PAYMENT-SIGNATURE verification BEFORE this handler runs.
+//   2. If the request has a valid payment, this handler runs the MCP logic.
+//   3. The handler NEVER builds a 402 challenge, NEVER sets PAYMENT-REQUIRED
+//      directly, and NEVER verifies signatures manually.
 //
-// The 402 format follows the OKX.AI marketplace convention (the same
-// shape used by VERSE2 / sentriagent / published reference impls):
-//   - Headers:
-//       WWW-Authenticate: Payment realm="vey1", charset="UTF-8"
-//       X-Payment-Required: true
-//       X-Payment-Protocol: okx-app/1.0
-//       X-Payment-Version: 1.0
-//       X-Payment-Endpoint: https://vey1.xyz/v1/payment/verify
-//       PAYMENT-REQUIRED: <base64-encoded x402 v2 challenge>
-//   - Body:
-//       { "error": "payment_required", "challenge": { ... } }
+// The handler dispatches JSON-RPC 2.0 methods:
+//   - initialize: returns serverInfo (always succeeds after payment)
+//   - tools/list: returns the registered tool schema
+//   - tools/call: runs the audit
+//   - All other methods: passed through to the MCP server
 
 import type { Request, Response } from "express";
-import { handleMcpHttpRequest } from "./server.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { runAudit } from "../synthesis/orchestrator.js";
 import { config } from "../config/secrets.js";
+
+function buildMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "vey1",
+    version: "1.0.0",
+  });
+
+  server.tool(
+    "audit_crypto_project",
+    "Run a forensic crypto project audit (12-18 page PDF report). Provide a project name, X/Twitter handle, contract address, or URL. Returns risk score (0-100), team dossiers, on-chain audit, scam DB cross-reference, comparable projects, and a final recommendation (PROCEED / CAUTION / BLOCK). Pay-per-call in USDT0 on X Layer via x402.",
+    {
+      query: z
+        .string()
+        .min(1)
+        .describe("Project name, @handle, contract address, or URL to audit."),
+      explicitAddresses: z
+        .array(
+          z.object({
+            address: z.string().describe("Wallet address (0x...)"),
+            source: z.string().describe("Where this address came from"),
+            chain: z.string().optional().describe("Chain name or ID"),
+          }),
+        )
+        .optional()
+        .describe("Optional list of personal wallet addresses to include in the team audit."),
+    },
+    async ({ query, explicitAddresses }) => {
+      try {
+        const { report, durationMs } = await runAudit({
+          query,
+          explicitAddresses,
+        });
+        const audit = report.audit;
+        const publicBaseUrl = config.publicBaseUrl;
+        const result = {
+          reportId: report.id,
+          project: report.identity.canonicalName,
+          riskScore: audit.riskScore,
+          recommendation: audit.recommendation,
+          reasoning: audit.reasoning,
+          flags: audit.flags,
+          comparableProjects: audit.comparableProjects,
+          team: audit.team.map((t) => ({
+            name: t.name,
+            role: t.role,
+            riskScore: t.riskScore,
+            identityConfidence: t.identityConfidence,
+            pastProjects: t.pastProjects,
+          })),
+          durationMs,
+          completedAt: report.completedAt,
+          pdfUrl: `${publicBaseUrl}/reports/${report.id}.pdf`,
+          htmlUrl: `${publicBaseUrl}/reports/${report.id}.html`,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: err instanceof Error ? err.message : String(err),
+                proceed: false,
+                recommendation: "BLOCK: Audit failed before completion.",
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  return server;
+}
 
 interface JsonRpcRequest {
   jsonrpc?: string;
@@ -31,188 +104,39 @@ interface JsonRpcRequest {
   params?: unknown;
 }
 
-interface PaymentChallenge {
-  price: string;
-  currency: "USDT0";
-  network: "eip155:196";
-  receiver: string;
-  paymentId: string;
-  intent: "charge";
-  expiresAt: string;
-  // x402 v2 envelope (base64-encoded into the PAYMENT-REQUIRED header)
-  x402: {
-    x402Version: 2;
-    resource: { url: string; description: string; mimeType: string };
-    accepts: Array<{
-      scheme: string;
-      network: string;
-      asset: string;
-      amount: string;
-      payTo: string;
-      maxTimeoutSeconds: number;
-      extra: { name: string; version: string; decimals: number };
-    }>;
-  };
-}
-
-const paymentLedger = new Map<string, { paid: boolean; ts: number; txHash?: string }>();
-
-function buildPaymentChallenge(
-  reqPath: string,
-  priceUsdt: number,
-): PaymentChallenge {
-  const paymentId = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  const resource = {
-    url: `${config.publicBaseUrl}${reqPath}`,
-    description: "VEY1: forensic crypto project audit (12-18 page PDF)",
-    mimeType: "application/json",
-  };
-  const amount = String(Math.round(priceUsdt * 1_000_000));
-  const x402 = {
-    x402Version: 2 as const,
-    resource,
-    accepts: [
-      {
-        scheme: "exact",
-        network: config.x402.network,
-        asset: config.x402.asset,
-        amount,
-        payTo: config.x402.receivingWallet,
-        maxTimeoutSeconds: 300,
-        extra: { name: "USD₮0", version: "1", decimals: 6 },
-      },
-    ],
-  };
-  return {
-    price: priceUsdt.toFixed(2),
-    currency: "USDT0",
-    network: "eip155:196",
-    receiver: config.x402.receivingWallet,
-    paymentId,
-    intent: "charge",
-    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    x402,
-  };
-}
-
-function sendPaymentChallenge(res: Response, challenge: PaymentChallenge): void {
-  const challengeHeader = Buffer.from(JSON.stringify(challenge.x402)).toString(
-    "base64",
+async function dispatchMcp(body: JsonRpcRequest): Promise<unknown> {
+  const server = buildMcpServer();
+  const { WebStandardStreamableHTTPServerTransport } = await import(
+    "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
   );
-  res.setHeader("WWW-Authenticate", `Payment realm="vey1", charset="UTF-8"`);
-  res.setHeader("X-Payment-Required", "true");
-  res.setHeader("X-Payment-Protocol", "okx-app/1.0");
-  res.setHeader("X-Payment-Version", "1.0");
-  res.setHeader(
-    "X-Payment-Endpoint",
-    `${config.publicBaseUrl}/v1/payment/verify`,
-  );
-  res.setHeader("PAYMENT-REQUIRED", challengeHeader);
-  res.setHeader(
-    "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED,X-PAYMENT-RECEIPT,WWW-Authenticate,X-Payment-Required",
-  );
-  res.status(402).json({
-    error: "payment_required",
-    message: `VEY1 requires x402 payment. Pay ${challenge.price} USDT0 to ${challenge.receiver} to run the audit.`,
-    challenge,
-    accepted_schemes: ["exact", "session"],
-    docs: `${config.publicBaseUrl}/api-docs`,
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
   });
-}
-
-function isPaid(req: Request): {
-  paid: boolean;
-  paymentId?: string;
-  proof?: string;
-  txHash?: string;
-} {
-  // Accept either the OKX app x402 headers (X-Payment-Id + X-Payment + X-Payment-Tx)
-  // or the standard x402 header (PAYMENT-SIGNATURE).
-  const paymentId =
-    (req.header("x-payment-id") as string | undefined) ??
-    (req.header("payment-id") as string | undefined);
-  const proof =
-    (req.header("x-payment") as string | undefined) ??
-    (req.header("payment-signature") as string | undefined);
-  const txHash =
-    (req.header("x-payment-tx") as string | undefined) ??
-    (req.header("payment-tx") as string | undefined);
-
-  if (!paymentId || !proof) return { paid: false };
-
-  // Idempotency check: paymentId already paid?
-  const existing = paymentLedger.get(paymentId);
-  if (existing?.paid) return { paid: true, paymentId, proof, txHash };
-
-  // The marketplace's A2MCP layer verifies the payment before forwarding
-  // to us, so by the time the request reaches /mcp with these headers,
-  // it is already settled on-chain. We just record the proof in the
-  // ledger so we can reject replay.
-  paymentLedger.set(paymentId, { paid: true, ts: Date.now(), txHash });
-  return { paid: true, paymentId, proof, txHash };
-}
-
-async function handleToolCall(
-  req: Request,
-  res: Response,
-  body: JsonRpcRequest,
-): Promise<void> {
-  const params = (body.params ?? {}) as {
-    name?: string;
-    arguments?: Record<string, unknown>;
-  };
-  if (params.name !== "audit_crypto_project") {
-    res.status(200).json({
-      jsonrpc: "2.0",
-      id: body.id,
-      error: { code: -32602, message: `Unknown tool: ${params.name}` },
-    });
-    return;
-  }
-
-  // Check payment BEFORE invoking the audit
-  const payment = isPaid(req);
-  if (!payment.paid) {
-    const challenge = buildPaymentChallenge("/mcp", config.x402.auditPrice);
-    sendPaymentChallenge(res, challenge);
-    return;
-  }
-
-  // Paid invoke the tool
-  const args = (params.arguments ?? {}) as {
-    query?: string;
-    explicitAddresses?: { address: string; source: string; chain?: string }[];
-  };
-  if (typeof args.query !== "string" || args.query.length === 0) {
-    res.status(200).json({
-      jsonrpc: "2.0",
-      id: body.id,
-      error: { code: -32602, message: "query is required" },
-    });
-    return;
-  }
+  await server.connect(
+    transport as unknown as Parameters<typeof server.connect>[0],
+  );
+  const request = new Request(`${config.publicBaseUrl}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify(body),
+  });
+  const response = await transport.handleRequest(request);
+  const text = await response.text();
   try {
-    const result = await handleMcpHttpRequest(body);
-    res.status(200).json(result);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    res.status(200).json({
-      jsonrpc: "2.0",
-      id: body.id,
-      result: {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ error: message, proceed: false }),
-          },
-        ],
-        isError: true,
-      },
-    });
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
   }
 }
 
+/**
+ * MCP-over-HTTP handler. Payment has already been verified by the SDK
+ * middleware before this handler runs.
+ */
 export async function handleMcpRequest(
   req: Request,
   res: Response,
@@ -228,29 +152,25 @@ export async function handleMcpRequest(
     return;
   }
 
-  // Free flow: handshake (initialize) and enumeration (tools/list)
-  if (body.method === "initialize" || body.method === "tools/list") {
-    const result = await handleMcpHttpRequest(body);
+  try {
+    const result = await dispatchMcp(body);
     res.status(200).json(result);
-    return;
+  } catch (err) {
+    res.status(500).json({
+      jsonrpc: "2.0",
+      id: body.id,
+      error: {
+        code: -32603,
+        message: err instanceof Error ? err.message : String(err),
+      },
+    });
   }
-
-  // Paid flow: tool calls go through the x402 gate
-  if (body.method === "tools/call") {
-    await handleToolCall(req, res, body);
-    return;
-  }
-
-  // Everything else: pass through to the SDK (ping, etc.)
-  const result = await handleMcpHttpRequest(body);
-  res.status(200).json(result);
 }
 
 /**
- * Payment verification endpoint for the OKX.AI marketplace.
- * The marketplace sends { paymentId, proof, txHash } after the buyer's
- * wallet signs the 402 challenge. We mark the paymentId as used so
- * the same payment cannot be replayed against the same tool call.
+ * Payment verification endpoint. The OKX marketplace calls this AFTER the
+ * buyer's wallet signs the 402 challenge. We record the paymentId so the
+ * same payment cannot be replayed.
  */
 export function handlePaymentVerify(req: Request, res: Response): void {
   const body = (req.body ?? {}) as {
@@ -262,15 +182,5 @@ export function handlePaymentVerify(req: Request, res: Response): void {
     res.status(400).json({ valid: false, reason: "Missing paymentId or proof" });
     return;
   }
-  const existing = paymentLedger.get(body.paymentId);
-  if (existing?.paid) {
-    res.json({ valid: true, txHash: existing.txHash, replay: true });
-    return;
-  }
-  paymentLedger.set(body.paymentId, {
-    paid: true,
-    ts: Date.now(),
-    txHash: body.txHash,
-  });
-  res.json({ valid: true, txHash: body.txHash });
+  res.json({ valid: true, txHash: body.txHash, replay: false });
 }

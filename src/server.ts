@@ -14,7 +14,7 @@ import { config } from "./config/secrets.js";
 import { existsSync, readFileSync, readFile, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
-import { buildPaymentLayer, refundSettlement, isPaymentHeaderValid } from "./utils/x402.js";
+import { buildPaymentLayer, refundSettlement } from "./utils/x402.js";
 import { handleMcpRequest, handlePaymentVerify } from "./mcp/http.js";
 import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
@@ -39,12 +39,6 @@ async function main() {
   }));
   app.use(helmet({ contentSecurityPolicy: false }));
 
-  // A2MCP endpoint (OKX.AI marketplace integration)
-  // The marketplace reviewer calls this to:
-  //   1. initialize (handshake)  - free
-  //   2. tools/list (enumerate)  - free
-  //   3. tools/call (execute)    - requires x402 payment
-  app.post("/mcp", handleMcpRequest);
 
   // Payment verification endpoint for the OKX.AI marketplace
   // (the marketplace calls this after the buyer wallet signs the 402 challenge)
@@ -62,19 +56,49 @@ async function main() {
     console.warn(`[vey1] onchainos CLI unavailable: ${onchainosHealth.error ?? "see logs"}`);
   }
 
-  // x402 payment layer
+  // x402 payment layer - MUST be available. buildPaymentLayer() THROWS
+  // if required env vars are missing; the process exits. The application
+  // must never start with payments disabled.
   const payments = buildPaymentLayer();
-  const paymentsLive = payments !== null;
-  if (!paymentsLive) {
-    console.warn(
-      "⚠️  PAYMENTS ARE OFF. Missing OKX_FACILITATOR_* env vars.\n" +
-        "   The service will answer for free. This is fine locally; it is NOT a valid ASP deployment.",
-    );
-  }
 
-  /** Pass-through when payments are off, so local dev doesn't need OKX keys. */
+  /** Payment middleware - there is no "no payments" path. */
   const pay: express.RequestHandler = (req, res, next) =>
-    payments ? payments.middleware(req, res, next) : next();
+    payments.middleware(req, res, next);
+
+  // A2A / Agent Card discovery endpoint.
+  // Per the latest A2A spec, served at /.well-known/agent.json.
+  app.get("/.well-known/agent.json", (_req, res) => {
+    res.json({
+      name: "VEY1",
+      description: "Forensic crypto project due diligence agent.",
+      url: config.publicBaseUrl,
+      version: "1.0.0",
+      provider: { organization: "ruzkypazzy", url: "https://github.com/ruzkypazzy/vey1" },
+      capabilities: { streaming: false, pushNotifications: false, stateTransition: false },
+      authentication: { schemes: ["x402"], x402Version: 2, network: config.x402.network, asset: config.x402.asset, payTo: config.x402.receivingWallet, facilitator: "https://web3.okx.com" },
+      defaultInputModes: ["application/json"],
+      defaultOutputModes: ["application/json", "application/pdf", "text/html"],
+      skills: [
+        {
+          id: "audit_crypto_project",
+          name: "audit_crypto_project",
+          description: "Run a forensic audit on a crypto project.",
+          tags: ["crypto", "audit", "due-diligence", "security", "forensic", "risk"],
+          inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" }, explicitAddresses: { type: "array" } } },
+          pricing: { amount: String(Math.round(config.x402.auditPrice * 1_000_000)), asset: config.x402.asset, network: config.x402.network, decimals: 6 }
+        }
+      ]
+    });
+  });
+  app.get("/agent-card", (_req, res) => res.redirect(301, "/.well-known/agent.json"));
+
+  // A2MCP endpoint (OKX.AI marketplace integration)
+  // The marketplace reviewer calls this to:
+  //   1. initialize (handshake)  - free
+  //   2. tools/list (enumerate)  - free
+  //   3. tools/call (execute)    - requires x402 payment
+  app.post("/mcp", pay, handleMcpRequest);
+
 
   // Health endpoints
   app.get("/ready", (_req, res) => res.json({ ok: true, ts: Date.now() }));
@@ -82,8 +106,10 @@ async function main() {
     res.json({
       status: "ok",
       agent: "VEY1",
-      payments: paymentsLive ? "live" : "disabled",
+      payments: "live",
       network: config.x402.network,
+      facilitator: "OKX Payment SDK",
+      x402Version: 2,
     }),
   );
 
@@ -293,16 +319,14 @@ async function main() {
     // The OKX SDK requires initialize() AFTER the server is listening
     // and BEFORE any request is handled. Skipping it is the most common
     // way to break the payment layer.
-    if (payments) {
-      try {
-        await payments.initialize();
-        console.log(
-          `💸 payments live — ${config.x402.auditPrice} USDT0 per call on ${config.x402.network}`,
-        );
-      } catch (err) {
-        console.error("payment layer failed to initialize:", err);
-        process.exit(1);
-      }
+    try {
+      await payments.initialize();
+      console.log(
+        `💸 payments live - ${config.x402.auditPrice} USDT0 per call on ${config.x402.network}`,
+      );
+    } catch (err) {
+      console.error("payment layer failed to initialize:", err);
+      process.exit(1);
     }
     console.log(`✨ VEY1 listening on http://${config.host}:${config.port}`);
     console.log(`   CWD: ${process.cwd()}`);
