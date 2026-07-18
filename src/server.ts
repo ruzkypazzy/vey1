@@ -15,7 +15,7 @@ import { existsSync, readFileSync, readFile, statSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentLayer, refundSettlement } from "./utils/x402.js";
-import { handleMcpRequest, handlePaymentVerify } from "./mcp/http.js";
+import { handleMcpRequest } from "./mcp/http.js";
 import { checkOnchainosAvailable, bootstrapSession } from "./services/onchainos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,19 +30,10 @@ async function main() {
     exposedHeaders: [
       "PAYMENT-REQUIRED",
       "X-PAYMENT-RECEIPT",
-      "WWW-Authenticate",
-      "X-Payment-Required",
-      "X-Payment-Protocol",
-      "X-Payment-Version",
-      "X-Payment-Endpoint",
     ],
   }));
   app.use(helmet({ contentSecurityPolicy: false }));
 
-
-  // Payment verification endpoint for the OKX.AI marketplace
-  // (the marketplace calls this after the buyer wallet signs the 402 challenge)
-  app.post("/v1/payment/verify", handlePaymentVerify);
 
   app.use(express.static(publicDir, { maxAge: "1h" }));
 

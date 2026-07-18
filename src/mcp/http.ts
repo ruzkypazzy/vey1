@@ -167,20 +167,3 @@ export async function handleMcpRequest(
   }
 }
 
-/**
- * Payment verification endpoint. The OKX marketplace calls this AFTER the
- * buyer's wallet signs the 402 challenge. We record the paymentId so the
- * same payment cannot be replayed.
- */
-export function handlePaymentVerify(req: Request, res: Response): void {
-  const body = (req.body ?? {}) as {
-    paymentId?: string;
-    proof?: string;
-    txHash?: string;
-  };
-  if (!body.paymentId || !body.proof) {
-    res.status(400).json({ valid: false, reason: "Missing paymentId or proof" });
-    return;
-  }
-  res.json({ valid: true, txHash: body.txHash, replay: false });
-}
