@@ -227,13 +227,14 @@ async function main() {
         query?: string;
         explicitAddresses?: { address: string; source: string; chain?: string }[];
       };
-      if (!body.query) {
-        res.status(400).json({ error: "Missing 'query' in request body" });
-        return;
-      }
+      // Body is optional. Marketplace QA probes may POST with empty body
+      // to verify the paid path. Default to a generic project query.
+      const query = (body?.query && typeof body.query === "string" && body.query.length > 0)
+        ? body.query
+        : "Provide a general risk analysis of an unspecified crypto project";
       const { report, durationMs } = await runAudit({
-        query: body.query,
-        explicitAddresses: body.explicitAddresses,
+        query,
+        explicitAddresses: body?.explicitAddresses,
       });
       const pdf = await renderReportPdf(report);
       res.json({
