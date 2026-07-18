@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@okxweb3/x402-core": "^0.1.0",
     "@okxweb3/x402-evm": "^0.2.1",
     "@okxweb3/x402-express": "^0.1.0",
@@ -23,7 +24,8 @@
     "puppeteer": "^23.10.4",
     "puppeteer-core": "^24.15.0",
     "undici": "^6.21.0",
-    "viem": "^2.55.2"
+    "viem": "^2.55.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
