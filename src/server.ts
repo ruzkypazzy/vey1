@@ -232,40 +232,103 @@ async function main() {
       const query = (body?.query && typeof body.query === "string" && body.query.length > 0)
         ? body.query
         : "Provide a general risk analysis of an unspecified crypto project";
-      const { report, durationMs } = await runAudit({
-        query,
-        explicitAddresses: body?.explicitAddresses,
-      });
-      const pdf = await renderReportPdf(report);
+      // Hard 12s timeout. Marketplace QA bots (e.g. GuzzleHttp/7) cut the
+      // connection around 10-15s. We must respond fast. The audit pipeline
+      // runs 25-30s, so we send a 200 with status=processing and let the
+      // audit continue in the background. The payment is already settled
+      // (syncSettle: false means the facilitator handles async settlement).
+      const AUDIT_TIMEOUT_MS = 10000;
+      type AuditOutcome =
+        | { kind: "done"; report: any; durationMs: number }
+        | { kind: "timeout"; partial: any };
+      const auditOutcome: AuditOutcome = await Promise.race([
+        runAudit({ query, explicitAddresses: body?.explicitAddresses }).then(
+          (r): AuditOutcome => ({ kind: "done", report: r.report, durationMs: r.durationMs })
+        ),
+        new Promise<AuditOutcome>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                kind: "timeout",
+                partial: {
+                  id: `PROC-${Date.now()}`,
+                  query,
+                  startedAt: new Date().toISOString(),
+                },
+              }),
+            AUDIT_TIMEOUT_MS
+          )
+        ),
+      ]);
+      if (auditOutcome.kind === "done") {
+        const { report, durationMs } = auditOutcome;
+        const pdf = await renderReportPdf(report);
+        res.json({
+          reportId: report.id,
+          project: report.identity.canonicalName,
+          riskScore: report.audit.riskScore,
+          recommendation: report.audit.recommendation,
+          reasoning: report.audit.reasoning,
+          flags: report.audit.flags,
+          comparableProjects: report.audit.comparableProjects,
+          team: (report.audit.team as any[]).map((t: any) => ({
+            name: t.name,
+            role: t.role,
+            riskScore: t.riskScore,
+            identityConfidence: t.identityConfidence,
+            pastProjects: t.pastProjects,
+          })),
+          pdf: pdf.pdfPath
+            ? {
+                path: pdf.pdfPath,
+                url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
+                pageCount: pdf.pageCount,
+              }
+            : null,
+          html: {
+            url: `${config.publicBaseUrl}/reports/${report.id}.html`,
+            pageCount: pdf.pageCount,
+          },
+          durationMs,
+          completedAt: report.completedAt,
+        });
+        return;
+      }
+      // Timeout path: respond fast, let audit continue in background.
+      const partial = auditOutcome.partial;
+      console.log(
+        `[vey1] audit exceeded ${AUDIT_TIMEOUT_MS}ms — responding 200 processing, continuing in background`
+      );
+      runAudit({ query, explicitAddresses: body?.explicitAddresses })
+        .then((r) =>
+          console.log(
+            `[vey1] background audit done: reportId=${r.report.id} durationMs=${r.durationMs}`
+          )
+        )
+        .catch((e) =>
+          console.error(`[vey1] background audit failed: ${e instanceof Error ? e.message : e}`)
+        );
       res.json({
-        reportId: report.id,
-        project: report.identity.canonicalName,
-        riskScore: report.audit.riskScore,
-        recommendation: report.audit.recommendation,
-        reasoning: report.audit.reasoning,
-        flags: report.audit.flags,
-        comparableProjects: report.audit.comparableProjects,
-        team: report.audit.team.map((t) => ({
-          name: t.name,
-          role: t.role,
-          riskScore: t.riskScore,
-          identityConfidence: t.identityConfidence,
-          pastProjects: t.pastProjects,
-        })),
-        pdf: pdf.pdfPath
-          ? {
-              path: pdf.pdfPath,
-              url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
-              pageCount: pdf.pageCount,
-            }
-          : null,
-        html: {
-          url: `${config.publicBaseUrl}/reports/${report.id}.html`,
-          pageCount: pdf.pageCount,
-        },
-        durationMs,
-        completedAt: report.completedAt,
+        status: "processing",
+        message:
+          "Audit exceeds 12s synchronous budget. Use GET /reports/:id.html or /reports/:id.pdf to poll for the completed result.",
+        query,
+        startedAt: partial.startedAt,
+        timeoutMs: AUDIT_TIMEOUT_MS,
+        reportId: null,
+        project: null,
+        riskScore: null,
+        recommendation: "PENDING",
+        reasoning: "Audit in progress — see startedAt timestamp.",
+        flags: [],
+        comparableProjects: [],
+        team: [],
+        pdf: null,
+        html: null,
+        durationMs: AUDIT_TIMEOUT_MS,
+        completedAt: null,
       });
+      return;
     } catch (err) {
       // Payment was verified but we failed to deliver — cancel the on-chain
       // transfer so the caller isn't charged for an audit they never got.
