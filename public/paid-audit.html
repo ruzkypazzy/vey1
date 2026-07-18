@@ -18,6 +18,7 @@
       --green: #10b981;
       --red: #ef4444;
       --border: #27272a;
+      --accent: #f59e0b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -25,58 +26,97 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       min-height: 100vh;
-      padding: 40px 24px;
+      padding: 24px;
     }
     .container { max-width: 720px; margin: 0 auto; }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
     .header .mark { background: var(--amber); color: #000; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; }
     .header h1 { font-size: 22px; }
     .header a { color: var(--text-dim); text-decoration: none; margin-left: auto; }
     .header a:hover { color: var(--amber); }
 
-    .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 32px; }
-    .card h2 { font-size: 28px; margin-bottom: 8px; }
-    .card p.lede { color: var(--text-dim); margin-bottom: 24px; }
+    /* Pay-mode banner (matches VERSE2) */
+    .pay-banner {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+    }
+    .pay-banner-content {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    .pay-banner-icon { font-size: 22px; }
+    .pay-banner-text { flex: 1; min-width: 200px; }
+    .pay-banner-text strong { display: block; font-size: 15px; }
+    .pay-banner-text small { color: var(--text-faint); font-size: 12px; }
+    .pay-banner-actions { display: flex; gap: 8px; }
 
-    .input-group { display: flex; gap: 8px; margin-bottom: 16px; }
+    .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+    .card h2 { font-size: 26px; margin-bottom: 6px; }
+    .card p.lede { color: var(--text-dim); margin-bottom: 20px; }
+
+    .input-group { display: flex; gap: 8px; margin-bottom: 12px; }
     .input-group input {
       flex: 1;
       background: var(--bg-3);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 13px 14px;
       color: var(--text);
-      font-size: 16px;
+      font-size: 15px;
       font-family: inherit;
     }
     .input-group input:focus { outline: none; border-color: var(--amber); }
 
-    button.cta {
+    button.primary {
       background: var(--amber);
       color: #000;
       border: none;
       border-radius: 8px;
-      padding: 14px 24px;
-      font-size: 16px;
+      padding: 13px 22px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       font-family: inherit;
       transition: background 0.15s;
     }
-    button.cta:hover { background: var(--amber-bright); }
-    button.cta:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary:hover { background: var(--amber-bright); }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+    button.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    button.ghost:hover { border-color: var(--amber); color: var(--amber); }
+    button.ghost.small { padding: 9px 14px; font-size: 13px; }
+
+    .link-btn {
+      background: none; border: none; color: var(--accent);
+      cursor: pointer; font: inherit; padding: 0; text-decoration: underline;
+    }
+
+    .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
     .example-chip {
       background: var(--bg-3);
       border: 1px solid var(--border);
       color: var(--text-dim);
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 999px;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
     }
     .example-chip:hover { border-color: var(--amber); color: var(--amber); }
+
+    .meta { display: flex; gap: 18px; margin-top: 18px; font-size: 12px; color: var(--text-faint); flex-wrap: wrap; }
 
     /* Payment step */
     .pay-step { display: none; }
@@ -86,54 +126,54 @@
       background: var(--bg-3);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 16px;
+      padding: 14px;
       margin: 12px 0;
     }
-    .pay-detail-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+    .pay-detail-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; gap: 12px; }
     .pay-detail-row + .pay-detail-row { border-top: 1px solid var(--border); }
-    .pay-detail-row .label { color: var(--text-dim); }
-    .pay-detail-row .value { font-family: "SF Mono", Menlo, monospace; color: var(--text); }
+    .pay-detail-row .label { color: var(--text-dim); flex-shrink: 0; }
+    .pay-detail-row .value { font-family: "SF Mono", Menlo, monospace; color: var(--text); text-align: right; word-break: break-all; }
     .pay-detail-row .value.highlight { color: var(--amber); }
 
-    .status-msg { padding: 12px 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; }
+    .status-msg { padding: 12px 14px; border-radius: 8px; margin: 14px 0; font-size: 13px; line-height: 1.55; }
     .status-msg.info { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; }
     .status-msg.warn { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); color: var(--amber-bright); }
     .status-msg.error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
     .status-msg.success { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #6ee7b7; }
 
-    .progress-bar { height: 6px; background: var(--bg-3); border-radius: 3px; overflow: hidden; margin: 16px 0; }
+    .progress-bar { height: 5px; background: var(--bg-3); border-radius: 3px; overflow: hidden; margin: 14px 0; }
     .progress-bar-fill { height: 100%; background: var(--amber); width: 0%; transition: width 0.3s; }
 
     /* Result step */
     .result-step { display: none; }
     .result-step.active { display: block; }
 
-    .risk-score { font-size: 64px; font-weight: 800; line-height: 1; margin: 16px 0; }
-    .risk-score .denom { font-size: 24px; color: var(--text-dim); font-weight: 400; }
-    .risk-level { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .risk-score { font-size: 56px; font-weight: 800; line-height: 1; margin: 14px 0; }
+    .risk-score .denom { font-size: 22px; color: var(--text-dim); font-weight: 400; }
+    .risk-level { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .risk-level.LOW { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.4); }
     .risk-level.MEDIUM { background: rgba(245, 158, 11, 0.15); color: var(--amber-bright); border: 1px solid rgba(245, 158, 11, 0.4); }
     .risk-level.HIGH { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
     .risk-level.CRITICAL { background: rgba(239, 68, 68, 0.25); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.5); }
 
-    .reasoning { color: var(--text-dim); line-height: 1.6; margin: 16px 0; font-size: 15px; }
+    .reasoning { color: var(--text-dim); line-height: 1.6; margin: 14px 0; font-size: 14px; }
 
     .download-btn {
       display: inline-block;
       background: var(--amber);
       color: #000;
-      padding: 12px 24px;
+      padding: 11px 20px;
       border-radius: 8px;
       text-decoration: none;
       font-weight: 600;
-      margin-right: 12px;
+      margin-right: 10px;
     }
     .download-btn:hover { background: var(--amber-bright); }
     .view-html {
       display: inline-block;
       background: transparent;
       color: var(--text);
-      padding: 12px 24px;
+      padding: 11px 20px;
       border-radius: 8px;
       text-decoration: none;
       font-weight: 600;
@@ -141,7 +181,7 @@
     }
     .view-html:hover { border-color: var(--amber); }
 
-    .raw { background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--text-dim); word-break: break-all; max-height: 200px; overflow: auto; }
+    .raw { background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 11px; font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-dim); word-break: break-all; max-height: 200px; overflow: auto; }
 
     .loading-dots { display: inline-block; }
     .loading-dots::after { content: ""; display: inline-block; width: 1.5em; text-align: left; animation: dots 1.5s infinite; }
@@ -152,6 +192,9 @@
       75% { content: "..."; }
       100% { content: ""; }
     }
+
+    .divider { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+    .section-title { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 8px; }
   </style>
 </head>
 <body>
@@ -160,6 +203,21 @@
       <div class="mark">V</div>
       <h1>VEY1 · Paid Audit</h1>
       <a href="/">← Back to home</a>
+    </div>
+
+    <!-- Pay-mode banner (matches VERSE2) -->
+    <div class="pay-banner">
+      <div class="pay-banner-content">
+        <div class="pay-banner-icon">💳</div>
+        <div class="pay-banner-text">
+          <strong>Pay per call: 1.5 USDT0 via x402 on X Layer</strong>
+          <small>12-18 page forensic PDF · 0 USDT0 for a demo (capped) · auto-billed only on delivery</small>
+        </div>
+        <div class="pay-banner-actions">
+          <button class="ghost small" id="banner-use-marketplace">Use marketplace</button>
+          <button class="ghost small" id="banner-use-demo">Use demo (free)</button>
+        </div>
+      </div>
     </div>
 
     <!-- Step 1: input -->
@@ -175,58 +233,68 @@
           value=""
           autocomplete="off"
         />
-        <button class="cta" id="start-btn">Continue</button>
+        <button class="primary" id="start-btn">Continue</button>
       </div>
 
       <div class="examples">
-        <span style="color: var(--text-faint); font-size: 13px; align-self: center;">Try:</span>
+        <span style="color: var(--text-faint); font-size: 12px; align-self: center;">Try:</span>
         <span class="example-chip" data-example="Uniswap">Uniswap</span>
         <span class="example-chip" data-example="Hyperliquid">Hyperliquid</span>
         <span class="example-chip" data-example="Aave">Aave</span>
         <span class="example-chip" data-example="https://curve.fi">curve.fi</span>
+        <span class="example-chip" data-example="StandX">StandX</span>
       </div>
 
-      <div style="display: flex; gap: 24px; margin-top: 24px; font-size: 13px; color: var(--text-faint); flex-wrap: wrap;">
+      <div class="meta">
         <span>💰 1.5 USDT0 / audit</span>
         <span>⚡ ~5s end-to-end</span>
         <span>🔗 x402 on X Layer</span>
+        <span>📋 6 OKX OnchainOS skills</span>
       </div>
     </div>
 
-    <!-- Step 2: payment -->
+    <!-- Step 2: payment (MARKETPLACE-FIRST, matches VERSE2) -->
     <div class="card pay-step" id="step-payment">
-      <h2>402 Payment Required</h2>
-      <p class="lede">This is the canonical x402 v2 challenge. The server returned HTTP 402 with a <code>PAYMENT-REQUIRED</code> header — exactly per spec.</p>
+      <h2>Payment required (x402 v2)</h2>
+      <p class="lede">This call costs <strong>1.5 USDT0</strong> on eip155:196. Two ways to pay:</p>
 
       <div id="payment-status"></div>
 
-      <h3 style="margin-top: 16px; font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Challenge (JSON body)</h3>
-      <pre class="raw" id="challenge-body">—</pre>
+      <h3 class="section-title">Option 1 — OKX.AI marketplace (recommended)</h3>
+      <div class="status-msg info">
+        <strong>Open VEY1 in the OKX.AI marketplace.</strong> Your wallet is pre-authorized there, so a single tap signs the x402 payment and VEY1 runs the audit automatically.
+      </div>
+      <div class="input-group" style="margin-top: 12px;">
+        <button class="primary" id="use-marketplace-btn">🚀 Open OKX.AI marketplace</button>
+        <button class="ghost" id="copy-invoke-btn">Copy invoke command</button>
+      </div>
 
-      <h3 style="margin-top: 16px; font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">PAYMENT-REQUIRED header (base64)</h3>
-      <pre class="raw" id="challenge-header">—</pre>
+      <hr class="divider" />
 
-      <h3 style="margin-top: 24px; font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Payment instructions</h3>
+      <h3 class="section-title">Option 2 — Pay manually with your wallet</h3>
+      <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 10px;">
+        Send 1.5 USDT0 to VEY1's wallet on X Layer, then paste the transaction hash below.
+      </p>
+
       <div class="pay-detail" id="pay-detail">
         <!-- Filled by JS -->
       </div>
 
-      <div id="manual-payment">
-        <div class="status-msg info">
-          <strong>How to complete this x402 payment:</strong><br>
-          1. Open your OKX Wallet (or any EVM wallet connected to X Layer, chain 196)<br>
-          2. Send exactly <strong>1.5 USDT0</strong> to <code>0x72233b78747765244855dd27180bbed9c0245f96</code><br>
-          3. Copy the transaction hash and paste below — VEY1 will verify it and run the audit
-        </div>
+      <div class="input-group" style="margin-top: 10px;">
+        <input type="text" id="tx-hash" placeholder="0x... (your transaction hash on X Layer)" style="font-family: 'SF Mono', Menlo, monospace; font-size: 12px;" />
+        <button class="primary" id="verify-btn">Verify & run audit</button>
+      </div>
 
-        <div class="input-group" style="margin-top: 16px;">
-          <input type="text" id="tx-hash" placeholder="0x... (your transaction hash on X Layer)" style="font-family: 'SF Mono', Menlo, monospace; font-size: 13px;" />
-          <button class="cta" id="verify-btn">Verify & run audit</button>
-        </div>
+      <details style="margin-top: 14px;">
+        <summary style="color: var(--text-faint); cursor: pointer; font-size: 12px;">Show raw 402 challenge (for power users)</summary>
+        <h3 class="section-title" style="margin-top: 12px;">PAYMENT-REQUIRED header (base64)</h3>
+        <pre class="raw" id="challenge-header">—</pre>
+        <h3 class="section-title">Challenge (JSON body)</h3>
+        <pre class="raw" id="challenge-body">—</pre>
+      </details>
 
-        <div style="margin-top: 16px;">
-          <button class="cta" style="background: transparent; color: var(--text-dim); border: 1px solid var(--border);" id="cancel-pay">Cancel</button>
-        </div>
+      <div style="margin-top: 18px;">
+        <button class="ghost" id="cancel-pay">← Back to query</button>
       </div>
     </div>
 
@@ -235,7 +303,7 @@
       <h2>Running audit<span class="loading-dots"></span></h2>
       <p class="lede">This typically takes ~5 seconds. VEY1 is pulling on-chain data, scraping project surface, and synthesizing the report.</p>
       <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width: 20%;"></div></div>
-      <div id="progress-status" style="color: var(--text-dim); font-size: 14px;">→ Resolving project identity</div>
+      <div id="progress-status" style="color: var(--text-dim); font-size: 13px;">→ Resolving project identity</div>
     </div>
 
     <!-- Step 4: result -->
@@ -245,18 +313,18 @@
       <div class="risk-level" id="result-level">—</div>
       <p class="reasoning" id="result-reasoning">—</p>
 
-      <div style="margin: 24px 0;">
+      <div style="margin: 20px 0;">
         <a href="#" id="result-pdf" class="download-btn">Download PDF</a>
         <a href="#" id="result-html" class="view-html" target="_blank">View HTML report</a>
       </div>
 
-      <details style="margin-top: 16px;">
-        <summary style="color: var(--text-dim); cursor: pointer; font-size: 13px;">Show raw JSON response</summary>
+      <details style="margin-top: 14px;">
+        <summary style="color: var(--text-dim); cursor: pointer; font-size: 12px;">Show raw JSON response</summary>
         <pre class="raw" id="result-raw"></pre>
       </details>
 
-      <div style="margin-top: 24px;">
-        <button class="cta" style="background: transparent; color: var(--text-dim); border: 1px solid var(--border);" id="another-btn">Run another audit</button>
+      <div style="margin-top: 20px;">
+        <button class="ghost" id="another-btn">Run another audit</button>
       </div>
     </div>
   </div>
@@ -276,11 +344,25 @@
       });
     };
 
+    const VEY1_AGENT_ID = 6016;       // OKX.AI marketplace ID
+    const VEY1_INVOKE_ENDPOINT = "https://vey1.xyz/v1/audit";
+
     // Examples
     document.querySelectorAll(".example-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         $("project-input").value = chip.dataset.example;
       });
+    });
+
+    // Banner — Use marketplace
+    $("banner-use-marketplace")?.addEventListener("click", () => {
+      window.open(`https://www.okx.ai/agents/${VEY1_AGENT_ID}`, "_blank", "noopener");
+    });
+
+    // Banner — Use demo (free) — skip the 402 by hitting /v1/demo
+    $("banner-use-demo")?.addEventListener("click", () => {
+      const query = $("project-input").value.trim() || "Uniswap";
+      runDemoAudit(query);
     });
 
     // Step 1: continue → request 402 challenge
@@ -301,6 +383,30 @@
     // Step 2: cancel
     $("cancel-pay").addEventListener("click", () => {
       showStep("step-input");
+    });
+
+    // Step 2: open marketplace
+    $("use-marketplace-btn").addEventListener("click", () => {
+      const query = localStorage.getItem("vey1:lastQuery") ?? "";
+      // Marketplace URL with deep link to the agent. Once listed, the marketplace
+      // also accepts a ?q=... query param for the agent to prefill.
+      const url = `https://www.okx.ai/agents/${VEY1_AGENT_ID}` + (query ? `?q=${encodeURIComponent(query)}` : "");
+      window.open(url, "_blank", "noopener");
+    });
+
+    // Step 2: copy invoke command (for the onchainos CLI users)
+    $("copy-invoke-btn").addEventListener("click", async () => {
+      const query = localStorage.getItem("vey1:lastQuery") ?? "";
+      const cmd = `onchainos agent x402-check --endpoint ${VEY1_INVOKE_ENDPOINT}\n` +
+                  `# Then to invoke from the CLI:\n` +
+                  `# onchainos agent task-402-pay --endpoint ${VEY1_INVOKE_ENDPOINT} --body '${JSON.stringify({ query }).replace(/'/g, "\\'")}'`;
+      try {
+        await navigator.clipboard.writeText(cmd);
+        showStatus("payment-status", "success", "✓ Copied to clipboard. Paste in your terminal to invoke via onchainos CLI.");
+      } catch (e) {
+        showStatus("payment-status", "info", "Run in your terminal: <code style=\"display:block;margin-top:6px;padding:8px;background:#000;color:#f59e0b;border-radius:6px;\">" +
+          cmd.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>") + "</code>");
+      }
     });
 
     // Step 2: verify payment & run audit
@@ -328,6 +434,48 @@
       $(id).innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
     }
 
+    async function runDemoAudit(query) {
+      showStatus("payment-status", "info", "Running free demo audit (no payment required)...");
+      showStep("step-progress");
+      const stages = [
+        { msg: "→ Resolving project identity", pct: 15 },
+        { msg: "→ Scraping project surface", pct: 30 },
+        { msg: "→ Pulling on-chain data via OnchainOS", pct: 50 },
+        { msg: "→ Web research via Tavily + GitHub + CoinGecko", pct: 70 },
+        { msg: "→ Building team dossiers", pct: 85 },
+        { msg: "→ Synthesizing report with LLM", pct: 95 },
+      ];
+      let stageIdx = 0;
+      const stageTimer = setInterval(() => {
+        if (stageIdx < stages.length) {
+          const s = stages[stageIdx++];
+          $("progress-status").textContent = s.msg;
+          $("progress-fill").style.width = s.pct + "%";
+        }
+      }, 800);
+      try {
+        const r = await fetch("/v1/demo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+        clearInterval(stageTimer);
+        $("progress-fill").style.width = "100%";
+        if (r.status === 200) {
+          const result = await r.json();
+          showResult(result);
+        } else {
+          const err = await r.text();
+          showStep("step-payment");
+          showStatus("payment-status", "error", `Demo failed (${r.status}): ${err.slice(0, 200)}`);
+        }
+      } catch (e) {
+        clearInterval(stageTimer);
+        showStep("step-payment");
+        showStatus("payment-status", "error", `Network error: ${e.message}`);
+      }
+    }
+
     async function requestChallenge(query) {
       showStatus("payment-status", "info", "Requesting payment challenge from VEY1...");
       try {
@@ -339,7 +487,6 @@
         if (r.status === 402) {
           // Got the challenge
           const challenge = await r.json();
-          // Read PAYMENT-REQUIRED header
           const headerChallenge = r.headers.get("payment-required") || r.headers.get("x-payment-required");
           renderChallenge(challenge, headerChallenge);
           showStep("step-payment");
@@ -359,29 +506,30 @@
     function renderChallenge(c, headerB64) {
       const detail = $("pay-detail");
       const accepts = c.accepts?.[0] ?? c;
+      const amount = accepts.amount ?? accepts.maxAmountRequired ?? "1500000";
+      const amountHuman = (Number(amount) / 1_000_000).toFixed(2);
       detail.innerHTML = `
         <div class="pay-detail-row">
           <span class="label">Amount</span>
-          <span class="value highlight">${accepts.maxAmountRequired ?? c.price ?? "1.5"} ${accepts.extra?.name ?? "USDT0"}</span>
+          <span class="value highlight">${amountHuman} ${accepts.extra?.name ?? "USDT0"}</span>
         </div>
         <div class="pay-detail-row">
           <span class="label">Network</span>
-          <span class="value">${accepts.network ?? "x-layer"}</span>
+          <span class="value">${accepts.network ?? "eip155:196"}</span>
         </div>
         <div class="pay-detail-row">
-          <span class="label">Asset (USDT0 contract)</span>
-          <span class="value" style="font-size: 12px;">${accepts.asset ?? "0x779ded0c9e1022225f8e0630b35a9b54be713736"}</span>
+          <span class="label">Asset (USDT0)</span>
+          <span class="value" style="font-size: 11px;">${accepts.asset ?? "0x779ded0c9e1022225f8e0630b35a9b54be713736"}</span>
         </div>
         <div class="pay-detail-row">
-          <span class="label">Recipient (VEY1 wallet)</span>
-          <span class="value" style="font-size: 12px;">${accepts.payTo ?? "0x72233b78747765244855dd27180bbed9c0245f96"}</span>
+          <span class="label">Recipient (VEY1)</span>
+          <span class="value" style="font-size: 11px;">${accepts.payTo ?? "0x72233b78747765244855dd27180bbed9c0245f96"}</span>
         </div>
         <div class="pay-detail-row">
           <span class="label">Resource</span>
-          <span class="value" style="font-size: 12px;">${accepts.resource?.url ?? c.resource?.url ?? "/v1/audit"}</span>
+          <span class="value" style="font-size: 11px;">${c.resource?.url ?? "/v1/audit"}</span>
         </div>
       `;
-      // Show the raw 402 challenge
       $("challenge-body").textContent = JSON.stringify(c, null, 2);
       $("challenge-header").textContent = headerB64 ?? "(header not present)";
     }
@@ -407,16 +555,11 @@
       }, 800);
 
       try {
-        // Build the X-PAYMENT header with the tx hash as proof
-        // The x402 v2 header format is a base64-encoded JSON with the tx hash
         const paymentPayload = {
           x402Version: 2,
           scheme: "exact",
           network: "x-layer",
-          payload: {
-            txHash: txHash,
-            payer: "0x0000000000000000000000000000000000000000", // Will be extracted from tx
-          },
+          payload: { txHash: txHash },
         };
         const paymentB64 = btoa(JSON.stringify(paymentPayload));
 
