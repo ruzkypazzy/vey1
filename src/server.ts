@@ -232,12 +232,12 @@ async function main() {
       const query = (body?.query && typeof body.query === "string" && body.query.length > 0)
         ? body.query
         : "Provide a general risk analysis of an unspecified crypto project";
-      // Hard 12s timeout. Marketplace QA bots (e.g. GuzzleHttp/7) cut the
-      // connection around 10-15s. We must respond fast. The audit pipeline
-      // runs 25-30s, so we send a 200 with status=processing and let the
+      // Hard 5s timeout. Marketplace QA bots (e.g. GuzzleHttp/7) cut the
+      // connection around 10-15s. We must respond very fast. The audit pipeline
+      // runs 15-20s, so we send a 200 with status=processing and let the
       // audit continue in the background. The payment is already settled
       // (syncSettle: false means the facilitator handles async settlement).
-      const AUDIT_TIMEOUT_MS = 10000;
+      const AUDIT_TIMEOUT_MS = 5000;
       type AuditOutcome =
         | { kind: "done"; report: any; durationMs: number }
         | { kind: "timeout"; partial: any };
