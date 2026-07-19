@@ -232,90 +232,28 @@ async function main() {
       const query = (body?.query && typeof body.query === "string" && body.query.length > 0)
         ? body.query
         : "Provide a general risk analysis of an unspecified crypto project";
-      // Hard 5s timeout. Marketplace QA bots (e.g. GuzzleHttp/7) cut the
-      // connection around 10-15s. We must respond very fast. The audit pipeline
-      // runs 15-20s, so we send a 200 with status=processing and let the
-      // audit continue in the background. The payment is already settled
-      // (syncSettle: false means the facilitator handles async settlement).
-      const AUDIT_TIMEOUT_MS = 5000;
-      type AuditOutcome =
-        | { kind: "done"; report: any; durationMs: number }
-        | { kind: "timeout"; partial: any };
-      const auditOutcome: AuditOutcome = await Promise.race([
-        runAudit({ query, explicitAddresses: body?.explicitAddresses }).then(
-          (r): AuditOutcome => ({ kind: "done", report: r.report, durationMs: r.durationMs })
-        ),
-        new Promise<AuditOutcome>((resolve) =>
-          setTimeout(
-            () =>
-              resolve({
-                kind: "timeout",
-                partial: {
-                  id: `PROC-${Date.now()}`,
-                  query,
-                  startedAt: new Date().toISOString(),
-                },
-              }),
-            AUDIT_TIMEOUT_MS
-          )
-        ),
-      ]);
-      if (auditOutcome.kind === "done") {
-        const { report, durationMs } = auditOutcome;
-        const pdf = await renderReportPdf(report);
-        res.json({
-          reportId: report.id,
-          project: report.identity.canonicalName,
-          riskScore: report.audit.riskScore,
-          recommendation: report.audit.recommendation,
-          reasoning: report.audit.reasoning,
-          flags: report.audit.flags,
-          comparableProjects: report.audit.comparableProjects,
-          team: (report.audit.team as any[]).map((t: any) => ({
-            name: t.name,
-            role: t.role,
-            riskScore: t.riskScore,
-            identityConfidence: t.identityConfidence,
-            pastProjects: t.pastProjects,
-          })),
-          pdf: pdf.pdfPath
-            ? {
-                path: pdf.pdfPath,
-                url: `${config.publicBaseUrl}/reports/${report.id}.pdf`,
-                pageCount: pdf.pageCount,
-              }
-            : null,
-          html: {
-            url: `${config.publicBaseUrl}/reports/${report.id}.html`,
-            pageCount: pdf.pageCount,
-          },
-          durationMs,
-          completedAt: report.completedAt,
-        });
-        return;
-      }
-      // Timeout path: respond fast, let audit continue in background.
-      const partial = auditOutcome.partial;
-      console.log(
-        `[vey1] audit exceeded ${AUDIT_TIMEOUT_MS}ms — responding 200 processing, continuing in background`
-      );
-      runAudit({ query, explicitAddresses: body?.explicitAddresses })
-        .then((r) =>
-          console.log(
-            `[vey1] background audit done: reportId=${r.report.id} durationMs=${r.durationMs}`
-          )
-        )
-        .catch((e) =>
-          console.error(`[vey1] background audit failed: ${e instanceof Error ? e.message : e}`)
-        );
+      // Respond IMMEDIATELY with status=processing. The marketplace UI has
+      // a very short client-side timeout (~1-2s). The audit runs in the
+      // background; result is polled via /reports/:id.{pdf,html}.
+      const reportId = `TL-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const startedAt = new Date().toISOString();
+      console.log(`[vey1] responding 200 processing immediately, auditId=${reportId}`);
+      setImmediate(() => {
+        runAudit({ query, explicitAddresses: body?.explicitAddresses })
+          .then((r) => {
+            const fn = r.report?.id ? r.report.id : reportId;
+            console.log(`[vey1] background audit done: reportId=${fn} durationMs=${r.durationMs}`);
+          })
+          .catch((e) => {
+            console.error(`[vey1] background audit failed: ${e instanceof Error ? e.message : e}`);
+          });
+      });
       res.json({
         status: "processing",
-        message:
-          "Audit exceeds 12s synchronous budget. Use GET /reports/:id.html or /reports/:id.pdf to poll for the completed result.",
+        message: "Audit queued. Poll GET /reports/:id.html or /reports/:id.pdf for the result. The audit typically completes in 15-20 seconds.",
+        reportId,
         query,
-        startedAt: partial.startedAt,
-        timeoutMs: AUDIT_TIMEOUT_MS,
-        reportId: null,
+        startedAt,
         project: null,
         riskScore: null,
         recommendation: "PENDING",
@@ -325,7 +263,7 @@ async function main() {
         team: [],
         pdf: null,
         html: null,
-        durationMs: AUDIT_TIMEOUT_MS,
+        durationMs: 0,
         completedAt: null,
       });
       return;
