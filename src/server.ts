@@ -303,7 +303,7 @@ async function main() {
       });
       res.json({
         status: "processing",
-        message: "Audit queued. Poll GET /reports/:id.html or /reports/:id.pdf for the result. The audit typically completes in 15-20 seconds.",
+        message: "Audit queued. Poll GET /reports/:id.json for status (refreshes every 5s). When complete, /reports/:id.html and /reports/:id.pdf contain the full 12-18 page report. The audit typically completes in 30-60 seconds.",
         reportId,
         query,
         startedAt,
