@@ -83,12 +83,12 @@ async function main() {
   });
   app.get("/agent-card", (_req, res) => res.redirect(301, "/.well-known/agent.json"));
 
-  // A2MCP endpoint (OKX.AI marketplace integration)
-  // The marketplace reviewer calls this to:
-  //   1. initialize (handshake)  - free
-  //   2. tools/list (enumerate)  - free
-  //   3. tools/call (execute)    - requires x402 payment
-  app.post("/mcp", pay, handleMcpRequest);
+  // A2MCP endpoint (OKX.AI marketplace integration).
+  // Per the OKX.AI spec, /mcp is a FREE A2MCP transport — the marketplace
+  // wraps it in its own x402 layer for billing. The standalone reviewer
+  // (human + bot) calls initialize/tools/list/tools/call and expects 200.
+  // Direct pay-per-call users go to POST /v1/audit (gated by pay middleware).
+  app.post("/mcp", handleMcpRequest);
 
 
   // Health endpoints

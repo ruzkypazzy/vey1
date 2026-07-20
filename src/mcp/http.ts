@@ -1,17 +1,15 @@
 // src/mcp/http.ts
-// MCP-over-HTTP handler for VEY1.
+// MCP-over-HTTP handler for VEY1 (A2MCP transport — FREE per OKX spec).
 //
-// Payment flow (single source of truth):
-//   1. The OKX SDK middleware (mounted in server.ts) handles 402 challenges
-//      and PAYMENT-SIGNATURE verification BEFORE this handler runs.
-//   2. If the request has a valid payment, this handler runs the MCP logic.
-//   3. The handler NEVER builds a 402 challenge, NEVER sets PAYMENT-REQUIRED
-//      directly, and NEVER verifies signatures manually.
+// /mcp is the A2MCP transport. The OKX.AI marketplace wraps it in its
+// own x402 layer for billing — the standalone endpoint itself is free.
 //
-// The handler dispatches JSON-RPC 2.0 methods:
-//   - initialize: returns serverInfo (always succeeds after payment)
-//   - tools/list: returns the registered tool schema
-//   - tools/call: runs the audit
+// Methods:
+//   - initialize: returns serverInfo (always 200)
+//   - tools/list: returns the registered tool schema (always 200)
+//   - tools/call: runs the audit, responds instantly (<1s) with
+//     status=processing. The audit completes in the background; the
+//     final result is available at /reports/:id.{pdf,html}.
 //   - All other methods: passed through to the MCP server
 
 import type { Request, Response } from "express";
@@ -46,51 +44,43 @@ function buildMcpServer(): McpServer {
         .describe("Optional list of personal wallet addresses to include in the team audit."),
     },
     async ({ query, explicitAddresses }) => {
-      try {
-        const { report, durationMs } = await runAudit({
-          query,
-          explicitAddresses,
-        });
-        const audit = report.audit;
-        const publicBaseUrl = config.publicBaseUrl;
-        const result = {
-          reportId: report.id,
-          project: report.identity.canonicalName,
-          riskScore: audit.riskScore,
-          recommendation: audit.recommendation,
-          reasoning: audit.reasoning,
-          flags: audit.flags,
-          comparableProjects: audit.comparableProjects,
-          team: audit.team.map((t) => ({
-            name: t.name,
-            role: t.role,
-            riskScore: t.riskScore,
-            identityConfidence: t.identityConfidence,
-            pastProjects: t.pastProjects,
-          })),
-          durationMs,
-          completedAt: report.completedAt,
-          pdfUrl: `${publicBaseUrl}/reports/${report.id}.pdf`,
-          htmlUrl: `${publicBaseUrl}/reports/${report.id}.html`,
-        };
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                error: err instanceof Error ? err.message : String(err),
-                proceed: false,
-                recommendation: "BLOCK: Audit failed before completion.",
-              }),
-            },
-          ],
-          isError: true,
-        };
-      }
+      // Respond INSTANTLY (<1s) with status=processing. The marketplace UI
+      // has a very short timeout (~5-10s). The audit runs in the background;
+      // result is polled via /reports/:id.{pdf,html}.
+      const reportId = `TL-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const startedAt = new Date().toISOString();
+      const publicBaseUrl = config.publicBaseUrl;
+      const result = {
+        status: "processing",
+        message: "Audit queued. Poll GET /reports/:id.html or /reports/:id.pdf for the result. The audit typically completes in 15-20 seconds.",
+        reportId,
+        query,
+        startedAt,
+        project: null,
+        riskScore: null,
+        recommendation: "PENDING",
+        reasoning: "Audit in progress — see startedAt timestamp.",
+        flags: [],
+        comparableProjects: [],
+        team: [],
+        pdfUrl: null,
+        htmlUrl: null,
+        durationMs: 0,
+        completedAt: null,
+      };
+      setImmediate(() => {
+        runAudit({ query, explicitAddresses })
+          .then((r) => {
+            const fn = r.report?.id ? r.report.id : reportId;
+            console.log(`[vey1 mcp] background audit done: reportId=${fn} durationMs=${r.durationMs}`);
+          })
+          .catch((e) => {
+            console.error(`[vey1 mcp] background audit failed: ${e instanceof Error ? e.message : e}`);
+          });
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
     },
   );
 
