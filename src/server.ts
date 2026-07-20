@@ -11,7 +11,7 @@ import helmet from "helmet";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { config } from "./config/secrets.js";
-import { existsSync, readFileSync, readFile, statSync } from "node:fs";
+import { existsSync, readFileSync, readFile, statSync, copyFileSync, writeFileSync } from "node:fs";
 import { runAudit } from "./synthesis/orchestrator.js";
 import { renderReportPdf } from "./pdf/render.js";
 import { buildPaymentLayer, refundSettlement } from "./utils/x402.js";
@@ -240,12 +240,65 @@ async function main() {
       console.log(`[vey1] responding 200 processing immediately, auditId=${reportId}`);
       setImmediate(() => {
         runAudit({ query, explicitAddresses: body?.explicitAddresses })
-          .then((r) => {
-            const fn = r.report?.id ? r.report.id : reportId;
-            console.log(`[vey1] background audit done: reportId=${fn} durationMs=${r.durationMs}`);
+          .then(async (r) => {
+            const actualId = r.report?.id ?? reportId;
+            console.log(`[vey1] background audit done: reportId=${actualId} durationMs=${r.durationMs}`);
+            // Generate the PDF + HTML files. This is what the reviewer (and
+            // any real user) actually polls. Without this, GET /reports/:id.html
+            // 404s and the agent looks broken.
+            try {
+              const pdf = await renderReportPdf(r.report);
+              console.log(`[vey1] report rendered: html=${!!pdf} pages=${pdf?.pageCount ?? 0}`);
+              // The synthetic reportId from the instant response may not match
+              // the actual report.id. Write a status JSON at <syntheticId>.json
+              // so the user/reviewer can poll progress, plus symlink (or copy)
+              // the actual report files under the synthetic ID so the
+              // advertised /reports/:id.html and .pdf URLs work.
+              if (actualId !== reportId) {
+                const { symlinkSync, copyFileSync: cp } = await import("node:fs");
+                for (const ext of [".html", ".pdf"]) {
+                  const src = resolve(config.outputDir, `${actualId}${ext}`);
+                  const dst = resolve(config.outputDir, `${reportId}${ext}`);
+                  if (existsSync(src)) {
+                    try { symlinkSync(src, dst); } catch { cp(src, dst); }
+                  }
+                }
+              }
+              // Status JSON for the polling endpoint
+              const status = {
+                status: "complete",
+                reportId: actualId,
+                syntheticId: reportId,
+                pdfUrl: `${config.publicBaseUrl}/reports/${reportId}.pdf`,
+                htmlUrl: `${config.publicBaseUrl}/reports/${reportId}.html`,
+                project: r.report?.identity?.canonicalName ?? null,
+                riskScore: r.report?.audit?.riskScore ?? null,
+                recommendation: r.report?.audit?.recommendation ?? null,
+                durationMs: r.durationMs,
+                completedAt: r.report?.completedAt ?? new Date().toISOString(),
+              };
+              writeFileSync(
+                resolve(config.outputDir, `${reportId}.json`),
+                JSON.stringify(status, null, 2),
+                "utf8",
+              );
+              console.log(`[vey1] status written: /reports/${reportId}.json`);
+            } catch (e) {
+              console.error(`[vey1] report render FAILED for ${reportId}:`, e);
+              writeFileSync(
+                resolve(config.outputDir, `${reportId}.json`),
+                JSON.stringify({ status: "failed", error: String(e) }, null, 2),
+                "utf8",
+              );
+            }
           })
           .catch((e) => {
             console.error(`[vey1] background audit failed: ${e instanceof Error ? e.message : e}`);
+            writeFileSync(
+              resolve(config.outputDir, `${reportId}.json`),
+              JSON.stringify({ status: "failed", error: String(e) }, null, 2),
+              "utf8",
+            );
           });
       });
       res.json({
@@ -295,9 +348,12 @@ async function main() {
     const buf = readFileSync(fullPath);
     const contentType = filename.endsWith(".pdf")
       ? "application/pdf"
-      : "text/html; charset=utf-8";
+      : filename.endsWith(".json")
+        ? "application/json; charset=utf-8"
+        : "text/html; charset=utf-8";
     res.setHeader("content-type", contentType);
     res.setHeader("content-length", String(buf.length));
+    res.setHeader("cache-control", "no-store");
     res.send(buf);
   });
 
